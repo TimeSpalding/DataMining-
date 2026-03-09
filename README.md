@@ -13,3 +13,5 @@ Module 2: Gu đại chúng (Niche Mining)	Phân tích sâu về khẩu vị âm 
 Module 3: Hệ khuyến nghị (RecSys)	Triển khai thuật toán ALS (Alternating Least Squares) cho Implicit Collaborative Filtering. Gợi ý bài hát dựa trên toàn bộ lịch sử nghe nhạc với cơ chế lọc tin cậy.
 
 Module 4: Churn & Dashboard	Dự báo tỷ lệ người dùng rời bỏ ứng dụng (Churn Prediction). Tích hợp toàn bộ kết quả từ các module trước lên Web Dashboard trực quan.
+
+Link phân công công việc : https://docs.google.com/spreadsheets/d/11epef7jHn0fEMzOTHz0TlGQOkU2Z5Lff1clV7m3yo8g/edit?gid=0#gid=0
