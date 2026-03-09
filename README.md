@@ -4,6 +4,7 @@ Dự án này tập trung vào việc khai phá dữ liệu nghe nhạc để th
 Cấu trúc các Branch
 Dưới đây là mô tả chi tiết nhiệm vụ của từng nhánh phát triển dựa trên tiến độ commit:
 Branch	Module đảm nhiệm	Chi tiết kỹ thuật
+
 Module 1: Phân cụm (Clustering)	Phân loại User dựa trên hành vi nghe nhạc. Xác định các chân dung khách hàng như: "Cú đêm", "Fan cứng", hay "Người mới".
 Module 2: Gu đại chúng (Niche Mining)	Phân tích sâu về khẩu vị âm nhạc. Trả lời câu hỏi: User này là người dẫn đầu xu hướng (Mainstream) hay là người săn lùng nhạc ngách (Niche)?
 Module 3: Hệ khuyến nghị (RecSys)	Triển khai thuật toán ALS (Alternating Least Squares) cho Implicit Collaborative Filtering. Gợi ý bài hát dựa trên toàn bộ lịch sử nghe nhạc với cơ chế lọc tin cậy.
