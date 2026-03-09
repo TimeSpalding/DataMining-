@@ -3,8 +3,8 @@ Music Analytics & Recommendation System
 Dự án này tập trung vào việc khai phá dữ liệu nghe nhạc(từ ListenBrain) để thấu hiểu hành vi người dùng và cung cấp các gợi ý cá nhân hóa chính xác nhất. Hệ thống được chia thành 4 nhánh (branch) tương ứng với 4 giai đoạn phân tích quan trọng.
 
 Cấu trúc các Branch
+
 Dưới đây là mô tả chi tiết nhiệm vụ của từng nhánh phát triển dựa trên tiến độ commit:
-Branch	Module đảm nhiệm	Chi tiết kỹ thuật
 
 Module 1: Phân cụm (Clustering)	Phân loại User dựa trên hành vi nghe nhạc. Xác định các chân dung khách hàng như: "Cú đêm", "Fan cứng", hay "Người mới".
 
