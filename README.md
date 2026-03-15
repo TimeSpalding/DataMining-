@@ -1,4 +1,4 @@
-Music Analytics & Recommendation System
+Music User Recommendation & Analytics
 
 Dự án này tập trung vào việc khai phá dữ liệu nghe nhạc(từ ListenBrain) để thấu hiểu hành vi người dùng và cung cấp các gợi ý cá nhân hóa chính xác nhất. Hệ thống được chia thành 4 nhánh (branch) tương ứng với 4 giai đoạn phân tích quan trọng.
 
