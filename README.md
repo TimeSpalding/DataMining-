@@ -8,7 +8,7 @@ Dưới đây là mô tả chi tiết nhiệm vụ của từng nhánh phát tri
 
 Module 1: Phân cụm (Clustering)	Phân loại User dựa trên hành vi nghe nhạc. Xác định các chân dung khách hàng như: "Cú đêm", "Fan cứng", hay "Người mới".
 
-Module 2: Xác định thể loại âm nhạc của nghệ sĩ dựa trên dữ liệu nghe nhạc của người dùng
+Module 2: Xác định thể loại âm nhạc của nghệ sĩ cũng như thể loại âm nhạc mà người dùng hay nghe dựa trên dữ liệu nghe nhạc của người dùng
 
 Module 3: Hệ khuyến nghị (RecSys)	Triển khai thuật toán ALS (Alternating Least Squares) cho Implicit Collaborative Filtering. Gợi ý bài hát dựa trên toàn bộ lịch sử nghe nhạc với cơ chế lọc tin cậy.
 
