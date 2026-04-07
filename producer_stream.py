@@ -45,7 +45,7 @@ try:
             print(f"[Đã gửi Real-time] User {event_dict['user_id']} nghe nhạc lúc {event_dict['timestamp']}")
             
             time.sleep(0.5)
-            
+
 except KeyboardInterrupt:
     print("\n⏹️ Đã dừng luồng phát dữ liệu chủ động (Ctrl+C)!")
 except Exception as e:
