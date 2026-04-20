@@ -1,11 +1,16 @@
+import os
 import glob
 import json
 import pandas as pd
 import streamlit as st
 from azure.eventhub import EventHubProducerClient, EventData
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # --- 1. CẤU HÌNH KẾT NỐI AZURE (Lưu Cache để không bị kết nối lại nhiều lần) ---
 CONNECTION_STRING = os.getenv("AZURE_CONNECTION_STRING")
+EVENT_HUB_NAME = os.getenv("EVENT_HUB_NAME")
 
 @st.cache_resource
 def get_producer_client():
@@ -64,6 +69,7 @@ with col2:
             event_dict = {
                 "user_id": str(row['user_id']),
                 "timestamp": str(row['timestamp']),
+                "artist_name": str(row['artist_name']),
                 "recording_msid": str(row['recording_msid'])
             }
             event_json = json.dumps(event_dict)
