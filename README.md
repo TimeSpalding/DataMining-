@@ -1,110 +1,101 @@
-# Hệ thống Gợi ý Hybrid (LightGCN + TF-IDF) - Phiên bản Local 8GB RAM
+# AI Music Recommender System 🎵
 
-Hệ thống gợi ý âm nhạc tiên tiến kết hợp giữa **Collaborative Filtering** (thuật toán đồ thị LightGCN) và **Content-based Filtering** (phân tích văn bản TF-IDF/SVD). Phiên bản này được thiết kế để giải quyết bài toán xử lý 11.2 triệu bài hát trên máy tính cá nhân có cấu hình RAM hạn chế (8GB).
+Hệ thống gợi ý âm nhạc thông minh sử dụng thuật toán **LightGCN** kết hợp với **TF-IDF** cho các chiến lược gợi ý đa dạng (Hybrid, Trending, Discovery, Real-time).
 
-## 1. Chuẩn bị Dữ liệu
-Để hệ thống có thể chạy ngay lập tức mà không cần huấn luyện lại, bạn cần tải bộ Artifacts (Model & Cache) đã được đóng gói sẵn:
-* **Tải xuống tại:** [Kaggle LightGCN Model Artifacts](https://www.kaggle.com/datasets/b22dckh068donngkhoa/lightgcn-model)
-* **Danh sách file bắt buộc:**
-    * `user_vectors.npy`, `item_vectors.npy`: Embeddings từ mô hình LightGCN.
-    * `mappings.db`: Cơ sở dữ liệu SQLite chứa thông tin bài hát (thay thế cho Dictionary khổng lồ để tiết kiệm RAM).
-    * `mappings_small.pkl`: Bản đồ ID người dùng và bài hát rút gọn.
-    * `master_indexes_cache.pkl`: Các vector nội dung đã tính toán sẵn.
-    * `tfidf_model.pkl`, `svd_64_model.pkl`: Mô hình xử lý văn bản.
+## 🚀 Tính năng chính
+- **Dành riêng cho bạn**: Gợi ý cá nhân hóa dựa trên hành vi nghe nhạc lịch sử.
+- **Khám phá & Xu hướng**: Cập nhật các bài hát đang thịnh hành và đề xuất mới mẻ thoát khỏi vùng an toàn.
+- **Playlist Generator**: Tự động tạo danh sách phát dựa trên bài hát hoặc nghệ sĩ yêu thích.
+- **AI Chatbot**: Trò chuyện và yêu cầu gợi ý âm nhạc thông qua trợ lý AI (tích hợp Claude).
+- **Trình phát nhạc tích hợp**: Nghe nhạc trực tiếp trên trình duyệt với giao diện hiện đại.
 
-## 2. Cài đặt Môi trường
-Hệ thống yêu cầu Python 3.8+ và các thư viện xử lý ma trận/vector sau:
+---
+
+## 📁 Cấu trúc thư mục
+Dự án được tổ chức theo chuẩn module để dễ dàng quản lý và mở rộng:
+
+```text
+Recommend-System-feature-optimize-rs/
+├── app.py                      # Điểm khởi chạy ứng dụng (Streamlit entry point)
+├── src/                        # Chứa toàn bộ mã nguồn của dự án
+│   ├── core/                   # Logic xử lý chính và thuật toán gợi ý
+│   │   └── recommender.py      # Engine điều khiển (LocalRecommender)
+│   └── ui/                     # Các module giao diện người dùng
+│       ├── chatbot.py          # Giao diện và logic Chatbot AI
+│       ├── components.py       # Các thành phần UI dùng chung (CSS, Card, Player)
+│       ├── tab_home.py         # Tab Trang chủ & Cá nhân
+│       ├── tab_discovery.py    # Tab Khám phá & Xu hướng
+│       └── ...                 # Các tab chức năng khác
+├── data/                       # Chứa dữ liệu thô và các tệp âm thanh
+│   ├── songs/                  # Thư mục chứa các file .mp3 (Cần bổ sung tay)
+│   └── archives/               # Lưu trữ các file nén dữ liệu
+├── model/                      # Chứa các trọng số model và database mapping
+│   ├── mappings.db             # SQLite database chứa metadata bài hát
+│   ├── index_mappings.pkl      # Ánh xạ index người dùng/vật phẩm
+│   └── ...                     # Các file .npy và .npz của LightGCN
+├── notebooks/                  # Thư mục lưu trữ các file Jupyter Notebook thử nghiệm
+├── scripts/                    # Các script tiện ích hỗ trợ (kiểm tra DB, convert dữ liệu)
+├── requirements.txt            # Danh sách các thư viện cần thiết
+└── README.md                   # Hướng dẫn sử dụng dự án
+```
+
+---
+
+## 🛠️ Hướng dẫn cài đặt & Sử dụng
+
+### 1. Yêu cầu hệ thống
+- Python 3.9+
+- RAM: Tối thiểu 8GB (Hệ thống đã được tối ưu hóa sử dụng SQLite Proxy để tiết kiệm RAM).
+
+### 2. Chuẩn bị dữ liệu
+> [!IMPORTANT]
+> Do dung lượng lớn, thư mục `model/` và `data/songs/` không được đưa lên Git.
+
+- **Model**: Tải các tệp model tại [Kaggle Dataset](https://www.kaggle.com/datasets/b22dckh068donngkhoa/lightgcn-model). Giải nén và đặt tất cả vào thư mục `model/`.
+- **Âm nhạc**: Thêm các file nhạc dạng `.mp3` vào thư mục `data/songs/` để tính năng Player hoạt động.
+
+### 3. Cài đặt thư viện
+Mở terminal tại thư mục gốc và chạy lệnh:
 ```bash
-pip install scikit-learn scipy pandas numpy tqdm joblib faiss-cpu
+pip install -r requirements.txt
 ```
 
-## 3. Cấu hình Đường dẫn (Quan trọng)
-Trong file `main.py` (hoặc script thực thi), bạn cần thay đổi các hằng số đường dẫn trỏ đúng vào thư mục chứa dữ liệu đã tải về. 
-
-**Lưu ý:** Sử dụng dấu gạch chéo xuôi `/` ngay cả trên Windows để tránh lỗi ký tự đặc biệt như `\t` (tab) hay `\n` (newline).
-
-```python
-# Đường dẫn thư mục chứa model
-LOCAL_MODEL_DIR = 'new_model/tfidf/new'               
-
-# Đường dẫn file SQLite (Tra cứu không tốn RAM)
-LOCAL_DB        = 'new_model/tfidf/new/mappings.db'  
-
-# Đường dẫn file pkl rút gọn
-LOCAL_SMALL_PKL = 'new_model/tfidf/new/mappings_small.pkl'  
-
-# Thư mục lưu trữ cache tính toán
-LOCAL_CACHE_DIR = 'new_model/tfidf/new'
-```
-
-## 4. Cách Chạy Demo
-Sau khi đã cấu hình xong đường dẫn, bạn chỉ cần thực thi file chính để xem kết quả gợi ý:
+### 4. Khởi chạy ứng dụng
+Chạy lệnh sau để bắt đầu trải nghiệm:
 ```bash
-python main.py
-```
-## 5. Các Tính năng Khuyến nghị Hệ sinh thái
-
-Hệ thống cung cấp một bộ API gợi ý cực kỳ phong phú, đáp ứng mọi kịch bản trải nghiệm nghe nhạc của người dùng thực tế:
-
-* **Hybrid Recommendation (`recommend_hybrid`):** Kết hợp chặt chẽ giữa hành vi người dùng (LightGCN) và nội dung bài hát (TF-IDF) thông qua trọng số $\alpha$ tùy chỉnh, giúp khắc phục triệt để điểm yếu của các mô hình truyền thống.
-* **Inclusive Recommendation (`recommend_inclusive`):** Đảm bảo sự công bằng cho các bài hát ít người biết. Tính năng này pha trộn giữa các bài hát thịnh hành (Top Hits) và các bài hát ẩn giấu, chưa từng có lượt nghe (Hidden Gems).
-* **Cold Content (`recommend_cold_content`):** Gợi ý thuần túy dựa trên nội dung văn bản (TF-IDF), là "cứu tinh" cho những người dùng mới (Cold-start users) chưa có lịch sử nghe nhạc.
-* **Similar to New Item (`recommend_similar_to_new_item`):** Gợi ý ngay lập tức các bài hát tương đồng khi một bài hát mới toanh vừa được thêm vào hệ thống mà **không cần phải huấn luyện lại mô hình**.
-* **Playlist Generator (`generate_playlist`):** Tự động sinh danh sách phát bằng cách pha trộn tinh tế giữa "Gu" của người dùng và một (hoặc nhiều) bài hát mồi (Seed tracks) làm điểm tựa.
-* **Real-time Session (`recommend_realtime`):** Phản ứng tức thì với ngữ cảnh. Hệ thống sẽ bẻ lái gợi ý dựa trên danh sách các bài hát người dùng vừa nghe liên tiếp trong vài phút qua.
-* **Trending (`recommend_trending`):** Thuật toán tính điểm xu hướng theo thời gian bán rã (Half-life), giúp đề xuất các bài hát đang hot nhất toàn hệ thống nhưng vẫn được cá nhân hóa theo từng người dùng.
-* **Discovery (`recommend_discovery`):** Gợi ý mang tính đột phá (Serendipity), chủ động kéo người dùng thoát khỏi "vùng an toàn" (Filter Bubble) để khám phá những nghệ sĩ/thể loại mới lạ nhưng vẫn hợp tai.
-* **Similar Users (`recommend_similar_users`):** Khai thác sức mạnh cộng đồng bằng cách quét qua không gian vector để tìm những người dùng "tâm giao" có cùng sở thích, từ đó đưa ra gợi ý chéo.
-* **Next in Session (`recommend_next_in_session`):** Hoạt động như tính năng "Autoplay", dự đoán bài hát tiếp theo hoàn hảo nhất để phát dựa trên chuỗi bài hát của phiên nghe hiện tại.
-* **Timeframe Filtering (`recommend_by_timeframe`):** Phân tích sự thay đổi gu âm nhạc theo thời gian, cho phép lọc và cá nhân hóa gợi ý chỉ dựa trên lịch sử nghe trong một khoảng thời gian cụ thể (ví dụ: 6 tháng qua).
-
-## 6. Đánh giá Hiệu suất (Evaluation Metrics)
-
-Hệ thống đã được đánh giá thực tế trên tập dữ liệu kiểm thử (Test set) với thang đo **K = 20**. Kết quả cho thấy việc kết hợp nội dung văn bản (TF-IDF) vào mô hình học sâu đồ thị (LightGCN) mang lại sự cải thiện rõ rệt về mọi mặt.
-
-### 6.1. Bảng so sánh độ đo định lượng
-
-| Metric (K=20) | Base LightGCN ($\alpha=0.0$) | Hybrid TF-IDF ($\alpha=0.25$) | Mức cải thiện |
-| :--- | :---: | :---: | :---: |
-| **Recall@20** | 0.0405 | **0.0499** | **+ 23.2%** |
-| **Precision@20** | 0.0301 | **0.0357** | **+ 18.6%** |
-| **NDCG@20** | 0.0483 | **0.0597** | **+ 23.6%** |
-
-* **Nhận xét:** Việc áp dụng trọng số Hybrid $\alpha=0.25$ (75% hành vi Collaborative + 25% độ tương đồng Content) giúp mô hình gợi ý chính xác hơn đáng kể. Chỉ số **NDCG tăng 23.6%** cho thấy các bài hát mà người dùng thực sự muốn nghe đã được đẩy lên các thứ hạng cao hơn trong Top 20. 
-* **Đánh đổi (Trade-off):** Tốc độ suy luận của mô hình Hybrid chậm hơn một chút so với Base LightGCN thuần (1.60s/batch so với ~0.4s/batch) do phải tính toán thêm ma trận nhúng văn bản. Tuy nhiên, mức thời gian này vẫn hoàn toàn đáp ứng tốt cho hệ thống Local.
-
-### 6.2. Đánh giá định tính qua các kịch bản (Qualitative Results)
-Dựa trên log chạy thực tế với một người dùng ngẫu nhiên (`User=13`, Tier: Warm), hệ thống chứng minh khả năng linh hoạt cao:
-* **Giải quyết Cold-Start & Hidden Gems:** Thuật toán `recommend_inclusive` xuất sắc trong việc pha trộn các bài hát thịnh hành (Top Hits từ mô hình đồ thị) và các bài hát chưa từng xuất hiện trong mô hình nhưng có metadata tương đồng (Hidden Gems khai thác bởi TF-IDF).
-* **Bắt kịp ngữ cảnh (Session-based):** Mô hình Real-time và Next-in-Session phản ứng cực nhạy. Khi user đưa vào 3 bài mồi (Seed tracks), hệ thống lập tức hướng các kết quả tiếp theo sang các nghệ sĩ tương tự (như *The Chemical Brothers*, *The Crystal Method*, *Metallica*).
-* **Khám phá (Serendipity):** Chế độ `recommend_discovery` tự động đẩy người dùng ra khỏi "vùng an toàn" để tìm kiếm các bài hát/nghệ sĩ mới nhưng vẫn giữ được sợi dây liên kết vô hình với sở thích gốc.
-1. Cài đặt thư viện yêu cầu
-Đảm bảo bạn đã cài đặt Python (khuyến nghị >= 3.9). Chạy lệnh sau để cài đặt các thư viện cần thiết:
-
-Bash
-pip install streamlit pandas numpy scipy scikit-learn faiss-cpu anthropic tqdm joblib
-2. Chuẩn bị Dữ Liệu
-Do hệ thống được thiết kế chạy local offline, bạn cần đảm bảo các file mô hình đã được đặt cùng thư mục gốc của dự án:
-
-mappings.db
-
-mappings_small.pkl
-
-user_vectors.npy & item_vectors.npy
-
-train_user_item.npz & test_user_item.npz
-
-3. Cấu hình API Key cho Chatbot
-Chatbot sử dụng dịch vụ của Anthropic. Bạn cần khai báo API Key. Tạo một thư mục .streamlit ở thư mục gốc, bên trong tạo file secrets.toml và dán key của bạn vào:
-
-Ini, TOML
-# .streamlit/secrets.toml
-ANTHROPIC_API_KEY = "sk-ant-xxx..."
-(Lưu ý: Không commit file secrets.toml này lên Github).
-
-4. Khởi chạy Ứng dụng
-Tại thư mục chứa dự án, mở terminal và chạy lệnh:
-
-Bash
 streamlit run app.py
-Hệ thống sẽ tải mô hình vào bộ nhớ đệm (mất khoảng 30s cho lần đầu tiên) và mở giao diện Web tại địa chỉ http://localhost:8501.
+```
+
+---
+
+## 🐳 Triển khai với Docker
+
+Nếu bạn muốn chạy ứng dụng trong container để đảm bảo tính nhất quán:
+
+### 1. Build Image
+```bash
+docker build -t music-recommender .
+```
+
+### 2. Run Container
+```bash
+docker run -p 8501:8501 music-recommender
+```
+Sau đó truy cập: `http://localhost:8501`
+
+---
+
+## 🖼️ Giao diện Demo
+
+Dưới đây là một số hình ảnh thực tế từ hệ thống:
+
+### 1. Trang chủ & Gợi ý Hybrid
+![Giao diện Trang chủ](./assets/demo_hybrid.png)
+*Giao diện sáng sủa theo phong cách "Minimalist Maximalism" với các thẻ bài hát trực quan.*
+
+### 2. Trợ lý ảo AI Chatbot
+![Giao diện Chatbot](./assets/demo_chatbot.png)
+*Hỗ trợ tìm kiếm, tạo playlist và trả lời câu hỏi về âm nhạc bằng ngôn ngữ tự nhiên.*
+
+---
+

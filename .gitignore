@@ -1,0 +1,18 @@
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Data & Models (Dữ liệu nặng không nên đưa lên Git)
+*.npy
+*.npz
+*.pkl
+*.db
+*.db-shm
+*.db-wal
+*.mp3
+archive.zip
+*.rar
+*.zip
+# IDE configs
+.vscode/
+.idea/

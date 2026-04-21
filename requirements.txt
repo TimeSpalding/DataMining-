@@ -1,0 +1,11 @@
+streamlit
+pandas
+numpy
+scipy
+joblib
+tqdm
+faiss-cpu
+scikit-learn
+plotly
+anthropic
+ipython
