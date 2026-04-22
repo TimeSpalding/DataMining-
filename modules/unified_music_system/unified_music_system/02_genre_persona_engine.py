@@ -59,8 +59,8 @@ def build_spark():
         .config("spark.local.dir", "/tmp/spark_tmp")
     )
     spark = builder.getOrCreate()
-    spark.sparkContext.setLogLevel("WARN")
-    spark.sparkContext.setCheckpointDir("/tmp/spark_checkpoints")
+    # spark.sparkContext.setLogLevel("WARN")
+    # spark.sparkContext.setCheckpointDir("/tmp/spark_checkpoints")
     return spark
 
 

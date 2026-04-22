@@ -39,7 +39,7 @@ def build_spark():
         if k != "appName":
             builder = builder.config(k, v)
     spark = builder.getOrCreate()
-    spark.sparkContext.setLogLevel("WARN")
+    # spark.sparkContext.setLogLevel("WARN")
     return spark
 
 
