@@ -34,7 +34,7 @@ from pyspark.ml.fpm import FPGrowth
 from pyspark.ml.functions import vector_to_array
 
 import sys
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, "/Workspace/Users/truongtrinhdac03@gmail.com/DataMining-/modules/unified_music_system")
 from config import (
     OUTPUT_DIR, SPARK_CONFIG, GENRES,
     MIN_PLAYS_FOR_GENRE, CHURN_CUTOFF_DATE
