@@ -475,7 +475,6 @@ def run(spark: SparkSession):
     save_csv(clustering_results,   "user_clusters")
 
     # Lưu model artifacts
-    import os
     model_out = os.path.join(OUTPUT_DIR, "model_artifacts.pkl")
     with open(model_out, "wb") as f:
         pickle.dump({
