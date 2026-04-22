@@ -332,23 +332,37 @@ def run():
     print("LAYER 2C — LIGHTGCN ENGINE")
     print("=" * 60)
 
-    # 1. Đọc dữ liệu sạch
-    print("\n[1/4] Đọc dữ liệu...")
-    clean_path = os.path.join(OUTPUT_DIR, "clean_data")
-    all_csvs   = [
-        os.path.join(clean_path, f)
-        for f in os.listdir(clean_path)
-        if f.endswith(".csv")
-    ]
-
-    accumulator = InteractionAccumulator()
-    for fpath in tqdm(all_csvs, desc="Loading chunks"):
-        try:
-            for chunk in pd.read_csv(fpath, chunksize=LGCN_CONFIG["chunk_size"], low_memory=False):
-                accumulator.add_dataframe(chunk)
-                del chunk; gc.collect()
-        except Exception as e:
-            print(f"  [WARN] {os.path.basename(fpath)}: {e}")
+    # 1. Đọc dữ liệu sạch từ Tầng Silver ──────────────────────────────
+    print("\n[1/4] Đọc dữ liệu từ default.silver_unified_logs...")
+    
+    # Gọi Spark Session (vì file này chạy độc lập)
+    from pyspark.sql import SparkSession
+    spark = SparkSession.builder.getOrCreate()
+    from pyspark.sql import functions as F
+    
+    # Đọc từ bảng Silver
+    df_silver = spark.read.table("default.silver_unified_logs").select(
+        "user_id", "recording_msid", "artist_name", "timestamp"
+    )
+    
+    # 🚨 VÁ LỖ HỔNG DỮ LIỆU: Bổ sung track_name giả lập
+    df_silver = df_silver.withColumn("track_name", F.col("recording_msid"))
+    
+    print("  Đang tải dữ liệu về Driver RAM để huấn luyện AI...")
+    # Chuyển đổi Spark DataFrame sang Pandas DataFrame
+    pdf = df_silver.toPandas()
+    
+    # Chia nhỏ DataFrame thành các chunk (giống ý tưởng ban đầu của team bạn) 
+    # để tránh tràn RAM khi nhồi vào Accumulator Dictionary
+    chunk_size = LGCN_CONFIG["chunk_size"]
+    import gc
+    for i in tqdm(range(0, len(pdf), chunk_size), desc="Processing chunks"):
+        chunk = pdf.iloc[i:i+chunk_size]
+        accumulator.add_dataframe(chunk)
+        del chunk
+        
+    del pdf
+    gc.collect()
 
     print(f"  Đọc xong: {accumulator.n_rows_processed:,} rows")
     user_item_matrix = accumulator.build_matrix(LGCN_CONFIG["min_interactions"])

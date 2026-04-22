@@ -5,7 +5,7 @@ Chỉnh sửa file này là toàn bộ hệ thống tự điều chỉnh theo.
 import os
 
 # ─────────────────────────── ĐƯỜNG DẪN ───────────────────────────────────────
-BASE_DIR        = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = "/dbfs/music_system"
 DATA_DIR        = os.path.join(BASE_DIR, "data", "raw")        # Đặt file CSV/XLSX gốc vào đây
 OUTPUT_DIR      = os.path.join(BASE_DIR, "data", "outputs")    # Layer 2 ghi kết quả vào đây
 MODEL_DIR       = os.path.join(BASE_DIR, "data", "models")     # LightGCN checkpoint

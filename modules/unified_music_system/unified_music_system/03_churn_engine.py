@@ -49,14 +49,16 @@ def run(spark: SparkSession):
     print("LAYER 2B — CHURN PREDICTION ENGINE")
     print("=" * 60)
 
-    # ── 1. Đọc dữ liệu sạch ────────────────────────────────────────────────
-    clean_path = os.path.join(OUTPUT_DIR, "clean_data")
-    print(f"\n[1/5] Đọc dữ liệu từ {clean_path}...")
-    df_raw = spark.read.option("header", "true").csv(clean_path)
+    # ── 1. Đọc dữ liệu từ Tầng Silver (Databricks) ────────────────────────
+    print(f"\n[1/5] Đọc dữ liệu từ bảng default.silver_unified_logs...")
+    
+    # "Hút" thẳng dữ liệu sạch từ Delta Table thay vì CSV
+    df_raw = spark.read.table("default.silver_unified_logs")
 
     df_clean = (
         df_raw
-        .withColumn("ts", F.to_timestamp("timestamp"))
+        # Bảng Silver đã xử lý sẵn kiểu Timestamp chuẩn, ta chỉ cần đổi tên cột cho khớp logic
+        .withColumnRenamed("timestamp", "ts")
         .dropna(subset=["ts", "user_id", "recording_msid"])
         .withColumn("hour", F.hour("ts"))
         .withColumn("is_night",

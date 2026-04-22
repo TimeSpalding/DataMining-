@@ -100,14 +100,18 @@ def run(spark: SparkSession):
     print("LAYER 2A — GENRE + PERSONA ENGINE")
     print("=" * 60)
 
-    # ── 1. Đọc dữ liệu sạch ────────────────────────────────────────────────
-    clean_path = os.path.join(OUTPUT_DIR, "clean_data")
-    print(f"\n[1/8] Đọc dữ liệu từ {clean_path}...")
-    df_raw = spark.read.option("header", "true").csv(clean_path)
+    # ── 1. Đọc dữ liệu từ Tầng Silver (Databricks) ────────────────────────
+    print(f"\n[1/8] Đọc dữ liệu từ bảng default.silver_unified_logs...")
+    
+    # Hút dữ liệu từ Database
+    df_raw = spark.read.table("default.silver_unified_logs")
 
     df_proc = (
         df_raw
-        .withColumn("ts", F.to_timestamp("timestamp"))
+        .withColumnRenamed("timestamp", "ts")
+        # 🚨 VÁ LỖ HỔNG DỮ LIỆU: Mượn tạm msid làm tên bài hát
+        .withColumn("track_name", F.col("recording_msid"))
+        # Drop các giá trị null thực sự
         .dropna(subset=["ts", "user_id", "track_name", "artist_name"])
         .withColumn("hour",    F.hour("ts"))
         .withColumn("date",    F.to_date("ts"))

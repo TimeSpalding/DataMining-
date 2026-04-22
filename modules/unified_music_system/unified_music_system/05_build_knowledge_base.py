@@ -220,12 +220,13 @@ def build_stats_table(conn: sqlite3.Connection):
 # ──────────────────────────────────────────────────────────────────────────────
 
 def run():
-    print("\n" + "=" * 60)
-    print("LAYER 3 — BUILD KNOWLEDGE BASE")
-    print("=" * 60)
-    print(f"Database: {KB_PATH}")
-
+    # Đảm bảo đường dẫn này khớp với config.py bạn đã sửa (BASE_DIR = "/dbfs/music_models")
+    print(f"Database sẽ được lưu tại: {KB_PATH}")
+    
+    # Tạo thư mục chứa database trên DBFS nếu chưa có
     os.makedirs(os.path.dirname(KB_PATH), exist_ok=True)
+    
+    # Kết nối SQLite
     conn = sqlite3.connect(KB_PATH)
 
     try:
