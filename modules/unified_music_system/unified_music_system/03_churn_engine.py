@@ -117,7 +117,7 @@ def run(spark: SparkSession):
         )
         .drop("is_active", "last_listen_date", "first_listen_date")
     )
-    final_df.cache()
+    # final_df.cache()
 
     churn_dist = final_df.groupBy("is_churn").count().collect()
     for row in churn_dist:

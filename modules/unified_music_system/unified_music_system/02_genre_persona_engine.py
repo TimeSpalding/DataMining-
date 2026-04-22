@@ -116,7 +116,7 @@ def run(spark: SparkSession):
         .withColumn("hour",    F.hour("ts"))
         .withColumn("date",    F.to_date("ts"))
         .withColumn("unix_ts", F.unix_timestamp("ts"))
-        .persist(StorageLevel.MEMORY_AND_DISK)
+       
     )
     n_rows = df_proc.count()
     print(f"  Records: {n_rows:,}")
@@ -202,7 +202,7 @@ def run(spark: SparkSession):
         .withColumn("log_total_listens",  F.log1p("total_listens"))
         .fillna(0)
     )
-    user_features.persist(StorageLevel.MEMORY_AND_DISK)
+    # user_features.persist(StorageLevel.MEMORY_AND_DISK)
     print(f"  Feature engineering hoàn tất: {user_features.count():,} users")
 
     # ── 3. Outlier Handling ─────────────────────────────────────────────────
@@ -225,7 +225,7 @@ def run(spark: SparkSession):
     user_features = user_features.filter(F.log1p(F.col("total_listens")) <= thresh)
     n_after = user_features.count()
     print(f"  Loại bỏ outliers: {n_before - n_after:,} users ({(n_before-n_after)/n_before*100:.1f}%)")
-    user_features.persist(StorageLevel.MEMORY_AND_DISK)
+    # user_features.persist(StorageLevel.MEMORY_AND_DISK)
 
     # ── 4. PCA + Clustering ─────────────────────────────────────────────────
     print("\n[4/8] PCA + Clustering...")
@@ -248,7 +248,7 @@ def run(spark: SparkSession):
     pca_model = PCA(k=k_pca, inputCol="scaled_features", outputCol="pca_features")
     pca_fit   = pca_model.fit(df_scaled)
     df_pca    = pca_fit.transform(df_scaled).select("user_id", "pca_features")
-    df_pca.cache()
+    # df_pca.cache()
 
     # Chọn K tốt nhất (range 3–7)
     best_algo, best_sil, best_k, predictions = None, -1.0, 4, None
@@ -432,7 +432,7 @@ def run(spark: SparkSession):
         propagated_full = propagated_full.withColumn(c, F.lit(default_vals[c]))
 
     user_taste_combined = user_taste_profile.unionByName(propagated_full, allowMissingColumns=True).distinct()
-    user_taste_combined.persist(StorageLevel.MEMORY_AND_DISK)
+    # user_taste_combined.persist(StorageLevel.MEMORY_AND_DISK)
     print(f"  User Taste Profile: {user_taste_combined.count():,} users")
 
     # Artist Genre Profile
@@ -464,7 +464,7 @@ def run(spark: SparkSession):
             F.concat(F.col("user_type"), F.lit(" | "), F.coalesce(F.col("Dominant_Genre"), F.lit("UNKNOWN")))
         )
     )
-    rich_profile.persist()
+    # rich_profile.persist()
     print(f"  Rich User Profile: {rich_profile.count():,} users")
 
     # ── 8. Lưu kết quả ──────────────────────────────────────────────────────
@@ -488,9 +488,9 @@ def run(spark: SparkSession):
         }, f)
     print(f"  ✅ Saved: {model_out}")
 
-    df_proc.unpersist()
-    user_features.unpersist()
-    rich_profile.unpersist()
+    # df_proc.unpersist()
+    # user_features.unpersist()
+    # rich_profile.unpersist()
     print("\n✅ Layer 2A — Genre + Persona Engine hoàn tất!")
 
 
