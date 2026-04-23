@@ -1,81 +1,54 @@
-"""
-config.py — Cấu hình trung tâm cho toàn bộ Unified Music System
-Chỉnh sửa file này là toàn bộ hệ thống tự điều chỉnh theo.
-"""
 import os
 
-# ─────────────────────────── ĐƯỜNG DẪN ───────────────────────────────────────
-BASE_DIR = "/Workspace/Users/truongtrinhdac03@gmail.com/DataMining-/model_outputs"
-DATA_DIR        = os.path.join(BASE_DIR, "data", "raw")        # Đặt file CSV/XLSX gốc vào đây
-OUTPUT_DIR      = os.path.join(BASE_DIR, "data", "outputs")    # Layer 2 ghi kết quả vào đây
-MODEL_DIR       = os.path.join(BASE_DIR, "data", "models")     # LightGCN checkpoint
+# =============================================================================
+# 1. CẤU HÌNH CƠ SỞ HẠ TẦNG (INFRASTRUCTURE)
+# =============================================================================
+# Đường dẫn gốc trong Workspace của bạn
+USER_EMAIL = "truongtd.b22kh130@stu.ptit.edu.vn"
+BASE_DIR = f"/Workspace/Users/{USER_EMAIL}/DataMining"
 
-# Layer 3 — Knowledge Base
-KB_PATH         = os.path.join(BASE_DIR, "data", "mappings.db")
+# Các thư mục con để lưu Model và Log
+MODEL_DIR = os.path.join(BASE_DIR, "models")
+OUTPUT_DIR = os.path.join(BASE_DIR, "outputs")
 
-# Layer 2 — Output artifacts (các file CSV/NPY do 3 engine sinh ra)
-CHURN_CSV       = os.path.join(OUTPUT_DIR, "web_dashboard_data_v2.csv")
-USER_TASTE_CSV  = os.path.join(OUTPUT_DIR, "user_taste_profile.csv")
-ARTIST_GENRE_CSV= os.path.join(OUTPUT_DIR, "artist_genre_profile.csv")
-RICH_PROFILE_CSV= os.path.join(OUTPUT_DIR, "rich_user_profile.csv")
-USER_VEC_NPY    = os.path.join(MODEL_DIR,  "user_vectors.npy")
-ITEM_VEC_NPY    = os.path.join(MODEL_DIR,  "item_vectors.npy")
-INDEX_MAPPINGS  = os.path.join(MODEL_DIR,  "index_mappings.pkl")
+# Nơi lưu file Database SQLite cuối cùng (Để bạn tải về máy chạy Web)
+KB_PATH = os.path.join(BASE_DIR, "music_knowledge.db")
 
-# ─────────────────────────── LAYER 1 — DATA PIPELINE ─────────────────────────
-SPARK_CONFIG = {
-    "appName"                       : "UnifiedMusicSystem",
-    "spark.driver.memory"           : "8g",
-    "spark.executor.memory"         : "8g",
-    "spark.sql.adaptive.enabled"    : "true",
-    "spark.sql.shuffle.partitions"  : "200",
-    "spark.serializer"              : "org.apache.spark.serializer.KryoSerializer",
-    "spark.sql.execution.arrow.pyspark.enabled": "true",
-}
-# Cột bắt buộc phải có trong data gốc
-REQUIRED_COLS = ["user_id", "recording_msid", "track_name", "artist_name", "timestamp"]
-TIMESTAMP_FORMAT = "yyyy-MM-dd HH:mm:ss"
+# =============================================================================
+# 2. CẤU HÌNH UNITY CATALOG (DATA WAREHOUSE)
+# =============================================================================
+CATALOG = "music_ai_workspace"
+SCHEMA = "default"
 
-# ─────────────────────────── LAYER 2A — GENRE + PERSONA ENGINE ───────────────
-GENRES = ["POP", "HIPHOP", "EDM", "RNB", "ROCK"]
-CHURN_CUTOFF_DATE   = "2026-01-24 23:59:59"   # Cửa sổ thời gian: mốc cutoff
-MIN_PLAYS_FOR_GENRE = 10                        # Artist cần ≥ 10 fan để có genre profile
+# Định nghĩa tên các bảng để các module gọi cho đồng bộ
+TABLE_SILVER_LOGS = f"{CATALOG}.{SCHEMA}.silver_unified_logs"
+TABLE_GOLD_PERSONA = f"{CATALOG}.{SCHEMA}.gold_user_persona"
+TABLE_GOLD_CHURN   = f"{CATALOG}.{SCHEMA}.gold_churn_predictions"
 
-# ─────────────────────────── LAYER 2B — CHURN ENGINE ─────────────────────────
-CHURN_WINDOW_DAYS   = 14     # Không nghe > 14 ngày → label churn = 1
-CHURN_RF_TREES      = 50
-CHURN_RF_DEPTH      = 5
-CHURN_FEATURE_COLS  = [
-    "total_listens", "daily_listen_rate",
-    "night_listen_ratio", "artist_diversity",
-    "tenure_days",
-]
-
-# ─────────────────────────── LAYER 2C — LIGHTGCN ENGINE ──────────────────────
+# =============================================================================
+# 3. THAM SỐ MÔ HÌNH AI (HYPERPARAMETERS)
+# =============================================================================
+# Cấu hình LightGCN (Module 04)
 LGCN_CONFIG = {
-    "emb_dim"          : 128,
-    "n_layers"         : 3,
-    "lr"               : 1e-3,
-    "decay"            : 1e-3,
-    "epochs"           : 20,
-    "batch_size"       : 8192,
-    "grad_clip"        : 1.0,
-    "min_interactions" : 20,
-    "chunk_size"       : 500_000,
-    "recency_halflife" : 60,     # half-life decay (ngày)
-    "neg_pool_size"    : 2_000_000,
+    "emb_dim": 128,
+    "n_layers": 3,
+    "lr": 1e-3,
+    "epochs": 20,         # Tăng/giảm tùy theo thời gian bạn có
+    "batch_size": 8192,
+    "chunk_size": 500000, # Nén dữ liệu để tránh tràn RAM
+    "neg_pool_size": 2000000
 }
 
-# ─────────────────────────── LAYER 4 — RECOMMENDER ───────────────────────────
+# Cấu hình Hệ thống Gợi ý lai (Module Recommender)
 RECOMMENDER_CONFIG = {
-    # Hybrid scoring
-    "default_content_alpha"  : 0.25,   # trọng số TF-IDF vs LightGCN
-    "genre_bonus_multiplier" : 1.20,   # +20% điểm nếu genre khớp user
-    "churn_risk_threshold"   : 70.0,   # % churn risk → bật chế độ bảo vệ
-    "churn_trending_weight"  : 0.6,    # trọng số trending khi user sắp churn
-    "cold_threshold"         : 5,      # item < 5 interaction → cold item
-    "mmr_lambda"             : 0.5,    # diversity (MMR reranking)
-    "trending_decay_days"    : 30,     # half-life trending score
-    "session_decay"          : 0.8,    # decay factor trong session
-    "serendipity_default"    : 0.3,    # mức độ khám phá mặc định
+    "default_content_alpha": 0.25,  # Trọng số cho TF-IDF (Content-based)
+    "churn_risk_threshold": 70.0,  # Ngưỡng báo động User sắp bỏ app
+    "cold_threshold": 5            # Số lần nghe tối thiểu để không bị coi là "người lạ"
 }
+
+# Cấu hình Churn (Module 03)
+CHURN_WINDOW_DAYS = 14
+CHURN_RF_TREES = 50
+CHURN_CUTOFF_DATE = "2026-01-24 23:59:59"
+
+print(f"✅ Đã nạp cấu hình hệ thống từ config.py (Catalog: {CATALOG})")

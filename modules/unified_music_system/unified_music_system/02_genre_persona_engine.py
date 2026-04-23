@@ -34,7 +34,7 @@ from pyspark.ml.fpm import FPGrowth
 from pyspark.ml.functions import vector_to_array
 
 import sys
-sys.path.insert(0, "/Workspace/Users/truongtrinhdac03@gmail.com/DataMining-/modules/unified_music_system")
+sys.path.insert(0, "/Workspace/Users/truongtd.b22kh130@stu.ptit.edu.vn/DataMining-/model_outputs")
 from config import (
     OUTPUT_DIR, SPARK_CONFIG, GENRES,
     MIN_PLAYS_FOR_GENRE, CHURN_CUTOFF_DATE
@@ -84,10 +84,10 @@ def cap_outliers(df, columns, lo=0.01, hi=0.99):
     return df
 
 
-def save_csv(df, name, coalesce_n=1):
-    path = os.path.join(OUTPUT_DIR, name)
-    df.coalesce(coalesce_n).write.mode("overwrite").option("header", "true").csv(path)
-    print(f"  ✅ Saved: {path}/")
+# def save_csv(df, name, coalesce_n=1):
+#     path = os.path.join(OUTPUT_DIR, name)
+#     df.coalesce(coalesce_n).write.mode("overwrite").option("header", "true").csv(path)
+#     print(f"  ✅ Saved: {path}/")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -100,24 +100,26 @@ def run(spark: SparkSession):
     print("LAYER 2A — GENRE + PERSONA ENGINE")
     print("=" * 60)
 
-    # ── 1. Đọc dữ liệu từ Tầng Silver (Databricks) ────────────────────────
-    print(f"\n[1/8] Đọc dữ liệu từ bảng default.silver_unified_logs...")
-    
-    # Hút dữ liệu từ Database
-    df_raw = spark.read.table("default.silver_unified_logs")
+# --- 1. Đọc dữ liệu từ Tầng Silver (Databricks) -------------------
+    print("\n[1/8] Đọc dữ liệu từ bảng music_ai_workspace.default.silver_unified_logs...")
 
+    # Hút dữ liệu từ Unity Catalog bằng đường dẫn đầy đủ 3 cấp
+    df_raw = spark.table("music_ai_workspace.default.silver_unified_logs")
+
+    # Tiền xử lý: Đổi tên cột, vá lỗi và ép kiểu thời gian
     df_proc = (
         df_raw
         .withColumnRenamed("timestamp", "ts")
-        # 🚨 VÁ LỖ HỔNG DỮ LIỆU: Mượn tạm msid làm tên bài hát
+        # Vá lỗi: Nếu không có tên bài hát, dùng ID bài hát thay thế
         .withColumn("track_name", F.col("recording_msid"))
-        # Drop các giá trị null thực sự
+        # Loại bỏ các dòng bị thiếu thông tin cốt lõi
         .dropna(subset=["ts", "user_id", "track_name", "artist_name"])
-        .withColumn("hour",    F.hour("ts"))
-        .withColumn("date",    F.to_date("ts"))
+        # Trích xuất các đặc trưng thời gian
+        .withColumn("hour", F.hour("ts"))
+        .withColumn("date", F.to_date("ts"))
         .withColumn("unix_ts", F.unix_timestamp("ts"))
-       
     )
+
     n_rows = df_proc.count()
     print(f"  Records: {n_rows:,}")
 
@@ -320,11 +322,15 @@ def run(spark: SparkSession):
     fp_model = FPGrowth(
         itemsCol="artists", minSupport=0.02, minConfidence=0.4,
     )
-    fp_rules_df = fp_model.fit(user_artists).associationRules.toPandas()
-    if not fp_rules_df.empty:
-        fp_path = os.path.join(OUTPUT_DIR, "fp_growth_rules.csv")
-        fp_rules_df.to_csv(fp_path, index=False)
-        print(f"  FP-Growth: {len(fp_rules_df)} luật → {fp_path}")
+    # Bỏ .toPandas(), lấy trực tiếp Spark DataFrame
+    fp_rules_spark_df = fp_model.fit(user_artists).associationRules
+
+    if not fp_rules_spark_df.isEmpty():
+        (fp_rules_spark_df.write
+            .format("delta")
+            .mode("overwrite")
+            .saveAsTable("music_ai_workspace.default.gold_association_rules"))
+        print(f"✅ Đã lưu Luật FP-Growth vào bảng gold_association_rules")
 
     # ── 6. Genre Classification (LSH + Label Propagation) ───────────────────
     print("\n[6/8] Genre Classification (LSH)...")

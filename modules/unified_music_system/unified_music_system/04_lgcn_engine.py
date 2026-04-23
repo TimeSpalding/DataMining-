@@ -32,7 +32,7 @@ from torch.utils.data import Dataset, DataLoader
 import faiss
 
 import sys
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, "/Workspace/Users/truongtd.b22kh130@stu.ptit.edu.vn/DataMining-/modules/unified_music_system")
 from config import OUTPUT_DIR, MODEL_DIR, LGCN_CONFIG
 
 os.makedirs(MODEL_DIR, exist_ok=True)
@@ -340,28 +340,33 @@ def run():
     spark = SparkSession.builder.getOrCreate()
     from pyspark.sql import functions as F
     
-    # Đọc từ bảng Silver
-    df_silver = spark.read.table("default.silver_unified_logs").select(
-        "user_id", "recording_msid", "artist_name", "timestamp"
+    # --- 1. Đọc dữ liệu sạch từ Tầng Silver (Unity Catalog) ---
+    print("\n[1/4] Đọc dữ liệu từ bảng music_ai_workspace.default.silver_unified_logs...")
+    
+    # Sử dụng Spark để gom nhóm trước, giảm hàng chục triệu dòng xuống còn các cặp (user, item) duy nhất
+    # Việc này giúp toPandas() nhẹ hơn gấp nhiều lần!
+    df_silver_agg = (spark.table("music_ai_workspace.default.silver_unified_logs")
+        .groupBy("user_id", "recording_msid")
+        .agg(
+            F.max("timestamp").alias("timestamp"), # Lấy thời gian tương tác cuối
+            F.first("artist_name").alias("artist_name")
+        )
+        .withColumn("track_name", F.col("recording_msid")) # Vá lỗ hổng track_name
     )
-    
-    # 🚨 VÁ LỖ HỔNG DỮ LIỆU: Bổ sung track_name giả lập
-    df_silver = df_silver.withColumn("track_name", F.col("recording_msid"))
-    
-    print("  Đang tải dữ liệu về Driver RAM để huấn luyện AI...")
-    # Chuyển đổi Spark DataFrame sang Pandas DataFrame
-    pdf = df_silver.toPandas()
-    
-    # Chia nhỏ DataFrame thành các chunk (giống ý tưởng ban đầu của team bạn) 
-    # để tránh tràn RAM khi nhồi vào Accumulator Dictionary
-    chunk_size = LGCN_CONFIG["chunk_size"]
-    import gc
-    for i in tqdm(range(0, len(pdf), chunk_size), desc="Processing chunks"):
-        chunk = pdf.iloc[i:i+chunk_size]
+
+    print("  Đang tải dữ liệu đã tổng hợp về RAM máy chủ...")
+    pdf = df_silver_agg.toPandas()
+
+    # --- 2. Nạp vào Accumulator ---
+    # Vì dữ liệu đã được Spark gom nhóm (Aggregated), chúng ta không cần chia chunk nữa
+    # hoặc nếu muốn giữ logic chunk cho an toàn thì code sẽ như sau:
+    chunk_size = LGCN_CONFIG.get("chunk_size", 100000)
+    for i in tqdm(range(0, len(pdf), chunk_size), desc="Nạp interactions vào Graph"):
+        chunk = pdf.iloc[i : i + chunk_size]
         accumulator.add_dataframe(chunk)
-        del chunk
         
     del pdf
+    import gc
     gc.collect()
 
     print(f"  Đọc xong: {accumulator.n_rows_processed:,} rows")

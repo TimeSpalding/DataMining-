@@ -25,7 +25,7 @@ from pyspark.ml.evaluation import BinaryClassificationEvaluator
 from pyspark.ml.functions import vector_to_array
 
 import sys
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, "/Workspace/Users/truongtd.b22kh130@stu.ptit.edu.vn/DataMining-/modules/unified_music_system")
 from config import (
     OUTPUT_DIR, SPARK_CONFIG, CHURN_CUTOFF_DATE,
     CHURN_WINDOW_DAYS, CHURN_RF_TREES, CHURN_RF_DEPTH, CHURN_FEATURE_COLS,
@@ -53,7 +53,7 @@ def run(spark: SparkSession):
     print(f"\n[1/5] Đọc dữ liệu từ bảng default.silver_unified_logs...")
     
     # "Hút" thẳng dữ liệu sạch từ Delta Table thay vì CSV
-    df_raw = spark.read.table("default.silver_unified_logs")
+    df_raw = spark.table("music_ai_workspace.default.silver_unified_logs")
 
     df_clean = (
         df_raw
@@ -165,27 +165,37 @@ def run(spark: SparkSession):
          .otherwise("LOW")
     )
 
-    # Ghép thêm persona_label và dominant_genre từ rich_user_profile nếu có
-    rich_path = os.path.join(OUTPUT_DIR, "rich_user_profile")
+    # -----------------------------------------------------------------
+    # ĐẠI TU PHẦN KẾT XUẤT DỮ LIỆU CHUẨN UNITY CATALOG
+    # -----------------------------------------------------------------
+    print("\n[6/6] Ghép nhãn Persona và Lưu kết quả vào Tầng Gold...")
+    
     try:
-        rich_df = spark.read.option("header", "true").csv(rich_path)
-        if "user_type" in rich_df.columns and "Dominant_Genre" in rich_df.columns:
-            rich_slim = rich_df.select(
-                "user_id",
-                F.col("user_type").alias("persona_label"),
-                F.col("Dominant_Genre").alias("dominant_genre"),
-            )
-            web_data = web_data.join(rich_slim, "user_id", "left")
-            print("  Ghép persona_label & dominant_genre: OK")
-    except Exception:
-        print("  [SKIP] rich_user_profile chưa có — chạy 02 trước để ghép persona")
+        # 1. Đọc bảng Persona (do Module 02 vừa tạo ra)
+        rich_df = spark.table("music_ai_workspace.default.gold_user_persona")
+        
+        # 2. Lấy 3 cột quan trọng nhất
+        rich_slim = rich_df.select(
+            "user_id",
+            F.col("user_type").alias("persona_label"),
+            F.col("cluster").alias("dominant_genre_cluster") # Tạm dùng cluster nếu chưa có cột text
+        )
+        
+        # 3. Ghép vào bảng Churn
+        final_web_data = web_data.join(rich_slim, "user_id", "left")
+        print("  ✅ Đã ghép thành công Persona Label")
+        
+    except Exception as e:
+        print(f"  [BỎ QUA] Không tìm thấy bảng Persona. Bạn đã chạy Module 02 chưa? Lỗi: {e}")
+        final_web_data = web_data
 
-    # Xuất ra CSV
-    pandas_df = web_data.toPandas()
-    out_path  = CHURN_CSV
-    pandas_df.to_csv(out_path, index=False)
-    print(f"  ✅ Đã lưu: {out_path}")
-    print(f"  Rows: {len(pandas_df):,} | Churn HIGH: {(pandas_df['churn_tier']=='HIGH').sum():,}")
+    # 4. Ghi đè kết quả cuối cùng thành Bảng Gold cho Dashboard
+    (final_web_data.write
+        .format("delta")
+        .mode("overwrite")
+        .saveAsTable("music_ai_workspace.default.gold_churn_predictions"))
+    
+    print("✅ Đã lưu kết quả dự đoán Churn vào bảng: gold_churn_predictions")
 
     print("\n✅ Layer 2B — Churn Engine hoàn tất!")
 

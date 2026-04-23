@@ -21,26 +21,17 @@ import pandas as pd
 import numpy as np
 
 import sys
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, "/Workspace/Users/truongtd.b22kh130@stu.ptit.edu.vn/DataMining-/modules/unified_music_system")
 from config import (
     OUTPUT_DIR, KB_PATH, MODEL_DIR,
     CHURN_CSV, ARTIST_GENRE_CSV, USER_TASTE_CSV, RICH_PROFILE_CSV,
 )
 
-
-def read_spark_csv_dir(dir_path: str) -> pd.DataFrame:
-    """Đọc thư mục CSV từ Spark (nhiều part-*.csv)."""
-    if not os.path.isdir(dir_path):
-        # Thử như file trực tiếp
-        if os.path.isfile(dir_path):
-            return pd.read_csv(dir_path, low_memory=False)
-        raise FileNotFoundError(f"Không tìm thấy: {dir_path}")
-    parts = glob.glob(os.path.join(dir_path, "part-*.csv"))
-    if not parts:
-        parts = glob.glob(os.path.join(dir_path, "*.csv"))
-    if not parts:
-        raise FileNotFoundError(f"Không có file CSV nào trong: {dir_path}")
-    return pd.concat([pd.read_csv(p, low_memory=False) for p in parts], ignore_index=True)
+def get_pandas_from_table(table_name: str) -> pd.DataFrame:
+    """Đọc bảng Delta từ Unity Catalog và chuyển về Pandas để nạp vào SQLite."""
+    print(f"  -> Đang trích xuất dữ liệu từ bảng: {table_name}")
+    # Chỉ lấy dữ liệu từ bảng Spark, chuyển về Pandas
+    return spark.table(table_name).toPandas()
 
 
 def normalize_col(df: pd.DataFrame, old: str, new: str) -> pd.DataFrame:
@@ -54,65 +45,27 @@ def normalize_col(df: pd.DataFrame, old: str, new: str) -> pd.DataFrame:
 
 def build_users_table(conn: sqlite3.Connection):
     print("\n[1/4] Building table: users...")
-
-    # Đọc churn data
-    churn_df = pd.read_csv(CHURN_CSV, low_memory=False)
-    churn_df.columns = churn_df.columns.str.strip()
-
-    # Chuẩn hóa tên cột
-    churn_df = normalize_col(churn_df, "churn_risk_percent", "churn_risk")
-    churn_df = normalize_col(churn_df, "user_type", "persona_label")
-    churn_df = normalize_col(churn_df, "Dominant_Genre", "dominant_genre")
-
-    # Đảm bảo các cột bắt buộc tồn tại
-    required = {
-        "user_id": "UNKNOWN", "churn_risk": 50.0,
-        "churn_tier": "MEDIUM", "persona_label": "Unknown",
-        "dominant_genre": "POP", "total_listens": 0,
-        "daily_listen_rate": 0.0, "tenure_days": 0,
-        "night_listen_ratio": 0.0, "artist_diversity": 0.0,
-    }
-    for col, default in required.items():
-        if col not in churn_df.columns:
-            churn_df[col] = default
-
-    # Thêm persona & genre từ rich_profile nếu chưa có
-    try:
-        rich_path = os.path.join(OUTPUT_DIR, "rich_user_profile")
-        rich_df   = read_spark_csv_dir(rich_path)
-        rich_df.columns = rich_df.columns.str.strip()
-        rich_df = normalize_col(rich_df, "user_type",     "persona_label")
-        rich_df = normalize_col(rich_df, "Dominant_Genre","dominant_genre")
-
-        merge_cols = ["user_id"] + [
-            c for c in ["persona_label", "dominant_genre"]
-            if c in rich_df.columns
-        ]
-        churn_df = churn_df.drop(
-            columns=[c for c in ["persona_label", "dominant_genre"] if c in churn_df.columns],
-            errors="ignore",
-        )
-        churn_df = churn_df.merge(rich_df[merge_cols].drop_duplicates("user_id"),
-                                  on="user_id", how="left")
-        for col, default in [("persona_label", "Unknown"), ("dominant_genre", "POP")]:
-            churn_df[col] = churn_df[col].fillna(default)
-        print("  Ghép rich_user_profile: OK")
-    except Exception as e:
-        print(f"  [SKIP] rich_user_profile: {e}")
-
-    # Ghi vào SQLite
+    
+    # 1. Đọc thẳng bảng kết quả cuối cùng của Module 03 (đã có cả Churn và Persona)
+    users_df = get_pandas_from_table("music_ai_workspace.default.gold_churn_predictions")
+    
+    # 2. Chuẩn hóa tên cột cho khớp với giao diện Web của bạn
+    users_df = normalize_col(users_df, "churn_risk_percent", "churn_risk")
+    
+    # 3. Ghi vào SQLite
     users_cols = [
-        "user_id", "churn_risk", "churn_tier", "persona_label", "dominant_genre",
-        "total_listens", "daily_listen_rate", "tenure_days",
-        "night_listen_ratio", "artist_diversity",
+        "user_id", "churn_risk", "churn_tier", "persona_label", 
+        "total_listens", "daily_listen_rate", "tenure_days", "artist_diversity"
     ]
-    final_cols = [c for c in users_cols if c in churn_df.columns]
-    churn_df[final_cols].to_sql("users", conn, if_exists="replace", index=False)
+    # Lọc lại những cột thực sự tồn tại
+    final_cols = [c for c in users_cols if c in users_df.columns]
+    
+    users_df[final_cols].to_sql("users", conn, if_exists="replace", index=False)
+    
+    # Tạo Index để Web search cho nhanh
     conn.execute("CREATE INDEX IF NOT EXISTS idx_users_uid ON users(user_id)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_users_churn ON users(churn_risk)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_users_genre ON users(dominant_genre)")
     conn.commit()
-    print(f"  ✅ users table: {len(churn_df):,} rows")
+    print(f"  ✅ Users table: {len(users_df):,} rows")
 
 
 def build_artists_table(conn: sqlite3.Connection):
@@ -220,37 +173,41 @@ def build_stats_table(conn: sqlite3.Connection):
 # ──────────────────────────────────────────────────────────────────────────────
 
 def run():
-    # Đảm bảo đường dẫn này khớp với config.py bạn đã sửa (BASE_DIR = "/dbfs/music_models")
-    print(f"Database sẽ được lưu tại: {KB_PATH}")
+    # 🎯 ĐƯỜNG DẪN QUAN TRỌNG: Lưu vào Workspace để bạn có thể Download về máy
+    # Thay 'truongtd.b22kh130' bằng đúng folder user của bạn trên Databricks
+    user_path = "/Workspace/Users/truongtd.b22kh130@stu.ptit.edu.vn/DataMining"
+    kb_path = f"{user_path}/music_knowledge.db"
     
-    # Tạo thư mục chứa database trên DBFS nếu chưa có
-    os.makedirs(os.path.dirname(KB_PATH), exist_ok=True)
+    print(f"🚀 Bắt đầu đóng gói Knowledge Base tại: {kb_path}")
+    
+    # Tạo thư mục nếu chưa có
+    import os
+    os.makedirs(os.path.dirname(kb_path), exist_ok=True)
     
     # Kết nối SQLite
-    conn = sqlite3.connect(KB_PATH)
-
+    conn = sqlite3.connect(kb_path)
+    
     try:
-        build_users_table(conn)
+        # Chạy lần lượt các xưởng sản xuất
+        build_users_table(conn)    # Bạn đã sửa hàm này theo ý tôi ở tin nhắn trước chưa?
         build_artists_table(conn)
         build_items_table(conn)
         build_stats_table(conn)
-
-        # Tóm tắt
-        print("\n── Database Summary ──")
-        for table in ["users", "artists", "items", "system_stats"]:
-            try:
-                count = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
-                print(f"  {table}: {count:,} rows")
-            except Exception:
-                print(f"  {table}: [không có dữ liệu]")
-
-        db_size = os.path.getsize(KB_PATH) / 1024 / 1024
-        print(f"\n  DB size: {db_size:.2f} MB")
-        print(f"\n✅ Layer 3 — Knowledge Base hoàn tất!")
-        print(f"   → {KB_PATH}")
+        
+        # Kiểm tra dung lượng file cuối cùng
+        db_size = os.path.getsize(kb_path) / (1024 * 1024)
+        print("\n" + "="*40)
+        print(f"✅ THÀNH CÔNG!")
+        print(f"📦 File: music_knowledge.db ({db_size:.2f} MB)")
+        print(f"📍 Vị trí: {kb_path}")
+        print("👉 Bây giờ hãy vào Workspace, click chuột phải vào file và chọn Download!")
+        print("="*40)
+        
+    except Exception as e:
+        print(f"❌ Thất bại: {e}")
     finally:
         conn.close()
 
-
+# Kích hoạt
 if __name__ == "__main__":
     run()
