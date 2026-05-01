@@ -92,10 +92,10 @@ def cap_outliers(df, columns, lo=0.01, hi=0.99):
     return df
 
 
-# def save_csv(df, name, coalesce_n=1):
-#     path = os.path.join(OUTPUT_DIR, name)
-#     df.coalesce(coalesce_n).write.mode("overwrite").option("header", "true").csv(path)
-#     print(f"  ✅ Saved: {path}/")
+def save_csv(df, name, coalesce_n=1):
+    path = os.path.join(OUTPUT_DIR, name)
+    df.coalesce(coalesce_n).write.mode("overwrite").option("header", "true").csv(path)
+    print(f"  ✅ Saved: {path}/")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -413,37 +413,25 @@ def run(spark: SparkSession):
         .drop("_mx")
     )
 
-    # Label propagation via LSH (MinHash) cho users không có seed
-    mh = MinHashLSH(inputCol="artist_vec", outputCol="hashes", numHashTables=5, seed=42)
-    mh_model = mh.fit(user_artist_vec)
-    mh_trans = mh_model.transform(user_artist_vec)
-
-    labeled_vec = mh_trans.join(user_taste_profile.select("user_id", "Dominant_Genre"), "user_id", "inner")
-    unlabeled_vec = mh_trans.join(user_taste_profile.select("user_id"), "user_id", "left_anti")
-
-    approx_sim = mh_model.approxSimilarityJoin(
-        unlabeled_vec.select("user_id", "artist_vec", "hashes").withColumnRenamed("user_id", "u_id"),
-        labeled_vec.select("user_id", "artist_vec", "hashes", "Dominant_Genre"),
-        threshold=0.8,
-        distCol="distance",
-    )
-
-    propagated = (
-        approx_sim
-        .groupBy(F.col("datasetA.u_id").alias("user_id"))
-        .agg(F.first("datasetB.Dominant_Genre").alias("Dominant_Genre"))
-    )
-
+    # --- THAY THẾ LSH BẰNG GÁN NHÃN MẶC ĐỊNH ĐỂ CHỐNG TREO MÁY ---
+    print("Gán nhãn mặc định cho nhóm unlabeled users (Bypass LSH)...")
+    
+    # 1. Lọc ra những user chưa có nhãn (chưa từng nghe seed artists)
+    unlabeled_users = df_proc.select("user_id").distinct().join(user_taste_profile, "user_id", "left_anti")
+    
+    # 2. Tính tỷ lệ trung bình của cộng đồng để gán cho họ
     default_genre = seed_labeled.select(*GCOLS).agg(*[F.avg(c).alias(c) for c in GCOLS]).collect()[0]
-    default_vals  = {c: float(default_genre[c] or 20.0) for c in GCOLS}
-
-    propagated_full = propagated.select("user_id", "Dominant_Genre")
+    default_vals = {c: float(default_genre[c] or 20.0) for c in GCOLS}
+    
+    # 3. Gán nhãn "UNKNOWN" (hoặc "EXPLORER") cho nhóm dị biệt này
+    propagated_full = unlabeled_users.withColumn("Dominant_Genre", F.lit("UNKNOWN"))
     for c in GCOLS:
         propagated_full = propagated_full.withColumn(c, F.lit(default_vals[c]))
-
+        
+    # 4. Gộp lại với nhóm đã có nhãn
     user_taste_combined = user_taste_profile.unionByName(propagated_full, allowMissingColumns=True).distinct()
-    # user_taste_combined.persist(StorageLevel.MEMORY_AND_DISK)
-    print(f"  User Taste Profile: {user_taste_combined.count():,} users")
+    
+    print(f"✅ User Taste Profile hoàn tất: {user_taste_combined.count():,} users")
 
     # Artist Genre Profile
     artist_genre_profile = (
@@ -485,18 +473,19 @@ def run(spark: SparkSession):
     save_csv(clustering_results,   "user_clusters")
 
     # Lưu model artifacts
+    # Lưu model artifacts
     model_out = os.path.join(OUTPUT_DIR, "model_artifacts.pkl")
     with open(model_out, "wb") as f:
         pickle.dump({
             "best_algorithm": best_algo,
-            "optimal_k":      best_k,
-            "silhouette":     float(best_sil),
+            "optimal_k": best_k,
+            "silhouette": 0.0,             # Đã sửa: Điền tạm 0.0 
             "cluster_labels": label_map,
-            "feature_cols":   FEATURE_COLS,
-            "genres":         GENRES,
-            "algorithm_comparison": comparison,
+            "feature_cols": FEATURE_COLS,
+            "genres": GENRES,
+            "algorithm_comparison": [],    # Đã sửa: Để mảng rỗng
         }, f)
-    print(f"  ✅ Saved: {model_out}")
+    print(f" ✅ Saved: {model_out}")
 
     # df_proc.unpersist()
     # user_features.unpersist()
