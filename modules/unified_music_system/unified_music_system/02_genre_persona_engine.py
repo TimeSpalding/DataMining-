@@ -275,10 +275,7 @@ def run(spark: SparkSession):
     model = kmeans.fit(df_pca)
     predictions = model.transform(df_pca)
 
-    # Tính điểm Silhouette đúng 1 lần duy nhất để báo cáo
-    sil = evaluator.evaluate(predictions)
-    print(f"✅ Best: {best_algo} k={best_k} silhouette={sil:.4f}")
-
+    print(f"✅ Đã phân cụm xong với {best_algo} k={best_k}")
     # Gán nhãn cluster → label ngôn ngữ tự nhiên
     cluster_stats = (
         predictions.join(user_features.select("user_id", *FEATURE_COLS), "user_id")
