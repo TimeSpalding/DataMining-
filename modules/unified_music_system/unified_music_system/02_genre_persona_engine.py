@@ -494,8 +494,4 @@ def run(spark: SparkSession):
 
 
 if __name__ == "__main__":
-    # spark = build_spark()
-    try:
-        run(spark)
-    finally:
-        spark.stop()
+    run(spark)
