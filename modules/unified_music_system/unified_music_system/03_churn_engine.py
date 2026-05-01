@@ -28,7 +28,7 @@ import sys
 sys.path.insert(0, "/Workspace/Users/truongtd.b22kh130@stu.ptit.edu.vn/DataMining-/modules/unified_music_system")
 from config import (
     OUTPUT_DIR, CHURN_CUTOFF_DATE,
-    CHURN_WINDOW_DAYS, CHURN_RF_TREES, CHURN_RF_DEPTH, CHURN_FEATURE_COLS,
+    CHURN_WINDOW_DAYS, CHURN_FEATURE_COLS,
     CHURN_CSV, RICH_PROFILE_CSV,
 )
 
