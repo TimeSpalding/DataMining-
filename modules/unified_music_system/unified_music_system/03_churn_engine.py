@@ -33,14 +33,14 @@ from config import (
 )
 
 
-def build_spark():
-    builder = SparkSession.builder.appName("ChurnEngine")
-    for k, v in SPARK_CONFIG.items():
-        if k != "appName":
-            builder = builder.config(k, v)
-    spark = builder.getOrCreate()
-    # spark.sparkContext.setLogLevel("WARN")
-    return spark
+# def build_spark():
+#     builder = SparkSession.builder.appName("ChurnEngine")
+#     for k, v in SPARK_CONFIG.items():
+#         if k != "appName":
+#             builder = builder.config(k, v)
+#     spark = builder.getOrCreate()
+#     # spark.sparkContext.setLogLevel("WARN")
+#     return spark
 
 
 def run(spark: SparkSession):
@@ -201,7 +201,7 @@ def run(spark: SparkSession):
 
 
 if __name__ == "__main__":
-    spark = build_spark()
+    # spark = build_spark()
     try:
         run(spark)
     finally:

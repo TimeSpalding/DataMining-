@@ -34,34 +34,42 @@ from pyspark.ml.fpm import FPGrowth
 from pyspark.ml.functions import vector_to_array
 
 import sys
-sys.path.insert(0, "/Workspace/Users/truongtd.b22kh130@stu.ptit.edu.vn/DataMining-/model_outputs")
+# Sửa lại đường dẫn cho chuẩn với thư mục chứa config.py
+sys.path.insert(0, "/Workspace/Users/truongtd.b22kh130@stu.ptit.edu.vn/DataMining-/modules/unified_music_system")
+
 from config import (
-    OUTPUT_DIR, SPARK_CONFIG, GENRES,
-    MIN_PLAYS_FOR_GENRE, CHURN_CUTOFF_DATE
+    OUTPUT_DIR, 
+    RECOMMENDER_CONFIG, 
+    CHURN_CUTOFF_DATE,
+    LGCN_CONFIG
 )
+
+# Tự định nghĩa lại các biến phụ ngay tại đây (do đã bị xóa khỏi config.py mới)
+GENRES = ["POP", "HIPHOP", "EDM", "RNB", "ROCK"]
+MIN_PLAYS_FOR_GENRE = 10
 
 
 # ──────────────────────────────────────────────────────────────────────────────
 # HELPERS
 # ──────────────────────────────────────────────────────────────────────────────
 
-def build_spark():
-    builder = SparkSession.builder
-    for k, v in SPARK_CONFIG.items():
-        if k == "appName":
-            builder = builder.appName("GenrePersonaEngine")
-        else:
-            builder = builder.config(k, v)
-    builder = (
-        builder
-        .config("spark.sql.adaptive.enabled", "true")
-        .config("spark.sql.shuffle.partitions", "400")
-        .config("spark.local.dir", "/tmp/spark_tmp")
-    )
-    spark = builder.getOrCreate()
-    # spark.sparkContext.setLogLevel("WARN")
-    # spark.sparkContext.setCheckpointDir("/tmp/spark_checkpoints")
-    return spark
+# def build_spark():
+#     builder = SparkSession.builder
+#     for k, v in SPARK_CONFIG.items():
+#         if k == "appName":
+#             builder = builder.appName("GenrePersonaEngine")
+#         else:
+#             builder = builder.config(k, v)
+#     builder = (
+#         builder
+#         .config("spark.sql.adaptive.enabled", "true")
+#         .config("spark.sql.shuffle.partitions", "400")
+#         .config("spark.local.dir", "/tmp/spark_tmp")
+#     )
+#     spark = builder.getOrCreate()
+#     # spark.sparkContext.setLogLevel("WARN")
+#     # spark.sparkContext.setCheckpointDir("/tmp/spark_checkpoints")
+#     return spark
 
 
 def safe_ratio(num, den):
@@ -104,7 +112,7 @@ def run(spark: SparkSession):
     print("\n[1/8] Đọc dữ liệu từ bảng music_ai_workspace.default.silver_unified_logs...")
 
     # Hút dữ liệu từ Unity Catalog bằng đường dẫn đầy đủ 3 cấp
-    df_raw = spark.table("music_ai_workspace.default.silver_unified_logs")
+    df_raw = spark.table("music_ai_workspace.default.silver_unified_logs").sample(fraction=0.05, seed=42)
 
     # Tiền xử lý: Đổi tên cột, vá lỗi và ép kiểu thời gian
     df_proc = (
@@ -257,20 +265,19 @@ def run(spark: SparkSession):
     evaluator = ClusteringEvaluator(featuresCol="pca_features", metricName="silhouette")
     comparison = []
 
-    for k in range(3, 8):
-        for algo_name, AlgoCls, kwargs in [
-            ("BisectingKMeans", BisectingKMeans, {"seed": 42}),
-            ("KMeans",          KMeans,          {"seed": 42}),
-        ]:
-            model = AlgoCls(k=k, featuresCol="pca_features", predictionCol="cluster", **kwargs).fit(df_pca)
-            preds = model.transform(df_pca)
-            sil   = evaluator.evaluate(preds)
-            comparison.append({"algorithm": algo_name, "k": k, "silhouette": sil})
-            if sil > best_sil:
-                best_sil, best_algo, best_k, predictions = sil, algo_name, k, preds
-            print(f"    {algo_name} k={k}: silhouette={sil:.4f}")
+    # --- 4. PCA + Clustering (ĐÃ TỐI ƯU CHO BIG DATA) ---
+    # Bỏ qua Grid Search để tránh treo máy. Chọn thẳng KMeans với K=5 (5 nhóm Persona)
+    print("Sử dụng KMeans với k=5 để tối ưu tốc độ...")
+    best_k = 5
+    best_algo = "KMeans"
 
-    print(f"  ✅ Best: {best_algo} k={best_k} silhouette={best_sil:.4f}")
+    kmeans = KMeans(k=best_k, featuresCol="pca_features", predictionCol="cluster", seed=42)
+    model = kmeans.fit(df_pca)
+    predictions = model.transform(df_pca)
+
+    # Tính điểm Silhouette đúng 1 lần duy nhất để báo cáo
+    sil = evaluator.evaluate(predictions)
+    print(f"✅ Best: {best_algo} k={best_k} silhouette={sil:.4f}")
 
     # Gán nhãn cluster → label ngôn ngữ tự nhiên
     cluster_stats = (
@@ -501,7 +508,7 @@ def run(spark: SparkSession):
 
 
 if __name__ == "__main__":
-    spark = build_spark()
+    # spark = build_spark()
     try:
         run(spark)
     finally:
