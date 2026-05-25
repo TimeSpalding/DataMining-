@@ -1,10 +1,6 @@
-# Databricks notebook source
-# MAGIC %md
-# MAGIC # Phân cụm người dùng (User Persona Clustering)
-# MAGIC **Mục tiêu:** Sử dụng bảng `gold_user_features` để gom cụm người dùng thành các Persona khác nhau dựa trên thói quen nghe nhạc (tần suất, mức độ đa dạng nghệ sĩ/thể loại, tỷ lệ nghe đêm).
-# MAGIC **Output:** Cập nhật lại nhãn Persona cho từng user.
 
-# COMMAND ----------
+
+
 
 # Import thư viện cần thiết
 from pyspark.sql import functions as F
@@ -12,6 +8,9 @@ from pyspark.ml.feature import VectorAssembler, StandardScaler, PCA
 from pyspark.ml.clustering import KMeans
 from pyspark.ml.evaluation import ClusteringEvaluator
 import matplotlib.pyplot as plt
+from pyspark.sql import SparkSession
+
+spark = SparkSession.builder.getOrCreate()
 
 # COMMAND ----------
 

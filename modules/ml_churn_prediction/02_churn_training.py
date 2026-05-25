@@ -14,6 +14,9 @@ from pyspark.ml.feature import VectorAssembler
 from pyspark.ml.classification import RandomForestClassifier
 from pyspark.ml.evaluation import BinaryClassificationEvaluator
 import datetime
+from pyspark.sql import SparkSession
+
+spark = SparkSession.builder.getOrCreate()
 
 # COMMAND ----------
 

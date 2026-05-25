@@ -12,6 +12,10 @@ import joblib
 import pandas as pd
 from pyspark.sql import functions as F
 import os
+from pyspark.sql import SparkSession
+
+spark = SparkSession.builder.getOrCreate()
+
 
 # Tùy chỉnh đường dẫn lưu artifacts
 ARTIFACTS_DIR = "/dbfs/FileStore/recommender_artifacts"
