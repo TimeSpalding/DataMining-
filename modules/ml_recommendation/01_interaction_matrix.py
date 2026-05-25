@@ -17,8 +17,14 @@ from pyspark.sql import SparkSession
 spark = SparkSession.builder.getOrCreate()
 
 
-# Tùy chỉnh đường dẫn lưu artifacts
-ARTIFACTS_DIR = "/dbfs/FileStore/recommender_artifacts"
+# 1. Tạo một Volume mới (sân bãi hợp lệ) bằng Spark SQL nếu nó chưa tồn tại
+spark.sql("CREATE VOLUME IF NOT EXISTS workspace.default.recommender_artifacts")
+
+# 2. Khai báo đường dẫn mới trỏ thẳng vào Volume vừa tạo
+ARTIFACTS_DIR = "/Volumes/workspace/default/recommender_artifacts"
+
+# 3. Serverless hoàn toàn cho phép os.makedirs hoạt động bên trong /Volumes/
+import os
 os.makedirs(ARTIFACTS_DIR, exist_ok=True)
 
 # COMMAND ----------
