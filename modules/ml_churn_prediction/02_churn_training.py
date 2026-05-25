@@ -79,7 +79,7 @@ train_df, test_df = ml_data.randomSplit([0.8, 0.2], seed=42)
 # COMMAND ----------
 
 # Bật autologging của MLflow cho PySpark ML
-mlflow.pyspark.ml.autolog()
+# mlflow.pyspark.ml.autolog()
 
 experiment_name = "/Users/truongtrinhdac03@gmail.com/Churn_Prediction_RF"
 mlflow.set_experiment(experiment_name)
@@ -88,6 +88,9 @@ with mlflow.start_run(run_name="RandomForest_TimeWindow"):
     # Cấu hình siêu tham số
     num_trees = 100
     max_depth = 7
+
+    mlflow.log_param("num_trees", num_trees)
+    mlflow.log_param("max_depth", max_depth)
     
     # Khởi tạo mô hình
     rf = RandomForestClassifier(featuresCol="features", labelCol="label", 
@@ -105,6 +108,8 @@ with mlflow.start_run(run_name="RandomForest_TimeWindow"):
     # Ghi nhận log thủ công thêm (Autolog đã lưu param nhưng có thể log thêm)
     mlflow.log_metric("test_auc", auc)
     print(f"Test AUC: {auc:.4f}")
+    
+    mlflow.spark.log_model(model, "spark-model")
 
 # COMMAND ----------
 
