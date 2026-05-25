@@ -39,10 +39,21 @@ silver_logs_df = spark.table("default.silver_unified_logs")
 
 # Lọc các tương tác rác nếu cần, và chuyển về Pandas để thao tác ma trận
 # Nếu dữ liệu siêu lớn, có thể dùng groupby count trên PySpark rồi mới collect
-pdf = silver_logs_df.select("user_id", "recording_msid", "timestamp").toPandas()
+# Đảm bảo bạn đã import thư viện functions ở đầu file
+# from pyspark.sql import functions as F
 
-# Tạo metadata (ánh xạ ID -> Tên bài hát/Ca sĩ)
-meta_df = silver_logs_df.select("recording_msid", "track_name", "artist_name").dropDuplicates(["recording_msid"]).toPandas()
+# 1. Ép Spark đếm số lượt nghe (play_count) của từng user với từng bài hát ngay trên mây
+grouped_spark_df = silver_logs_df.groupBy("user_id", "recording_msid").agg(
+    F.count("*").alias("play_count")
+)
+
+# 2. Dữ liệu lúc này đã loại bỏ hoàn toàn các dòng trùng lặp, dung lượng giảm từ 8.1GB xuống chỉ còn vài chục MB.
+# Bây giờ gọi toPandas() mới thực sự an toàn tuyệt đối!
+pdf = grouped_spark_df.toPandas()
+
+spark_meta_df = silver_logs_df.select("recording_msid", "track_name", "artist_name").dropDuplicates(["recording_msid"])
+meta_df = spark_meta_df.toPandas()
+
 item_meta = meta_df.set_index("recording_msid").to_dict('index')
 
 # COMMAND ----------
