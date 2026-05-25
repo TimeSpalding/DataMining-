@@ -109,7 +109,13 @@ with mlflow.start_run(run_name="RandomForest_TimeWindow"):
     mlflow.log_metric("test_auc", auc)
     print(f"Test AUC: {auc:.4f}")
     
-    mlflow.spark.log_model(model, "spark-model")
+    spark.sql("CREATE VOLUME IF NOT EXISTS workspace.default.mlflow_tmp")
+    
+    mlflow.spark.log_model(
+        model, 
+        "spark-model", 
+        dfs_tmpdir="/Volumes/workspace/default/mlflow_tmp"
+)
 
 # COMMAND ----------
 
