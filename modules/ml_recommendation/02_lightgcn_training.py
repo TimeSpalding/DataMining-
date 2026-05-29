@@ -8,7 +8,16 @@
 
 # COMMAND ----------
 
-# MAGIC %pip install torch faiss-cpu scikit-learn joblib
+import subprocess
+import sys
+
+# Khắc phục lỗi thiếu thư viện cho Databricks Python Script Task
+def install_packages():
+    packages = ["torch", "faiss-cpu", "scikit-learn", "joblib"]
+    print("Đang tự động cài đặt các thư viện:", packages)
+    subprocess.check_call([sys.executable, "-m", "pip", "install"] + packages)
+
+install_packages()
 
 # COMMAND ----------
 
