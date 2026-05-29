@@ -161,6 +161,8 @@ print(f"Test set: {test_matrix.nnz:,} interactions")
 
 # COMMAND ----------
 
+import shutil
+
 # Lấy metadata cho các item còn lại
 meta_df = silver_logs_df.select("recording_msid", "track_name", "artist_name").dropDuplicates(["recording_msid"]).toPandas()
 meta_df = meta_df[meta_df['recording_msid'].isin(item2idx.keys())]
@@ -174,10 +176,24 @@ mappings = {
     'idx2item': idx2item,
     'item_meta': item_meta
 }
-joblib.dump(mappings, os.path.join(ARTIFACTS_DIR, "index_mappings.pkl"))
 
-# Lưu ma trận sparse
-sp.save_npz(os.path.join(ARTIFACTS_DIR, "train_matrix.npz"), train_matrix)
-sp.save_npz(os.path.join(ARTIFACTS_DIR, "test_matrix.npz"), test_matrix)
+# --- Workaround: Lưu tạm ra /tmp để tránh lỗi Input/Output (Errno 5) của FUSE Mount ---
+tmp_dir = "/tmp/recommender_artifacts"
+os.makedirs(tmp_dir, exist_ok=True)
 
-print(f"Đã lưu ma trận và mapping vào: {ARTIFACTS_DIR}")
+tmp_mappings = os.path.join(tmp_dir, "index_mappings.pkl")
+tmp_train = os.path.join(tmp_dir, "train_matrix.npz")
+tmp_test = os.path.join(tmp_dir, "test_matrix.npz")
+
+print("Đang lưu file tạm tại /tmp...")
+joblib.dump(mappings, tmp_mappings)
+sp.save_npz(tmp_train, train_matrix)
+sp.save_npz(tmp_test, test_matrix)
+
+print(f"Đang copy file sang Volume: {ARTIFACTS_DIR}...")
+shutil.copy(tmp_mappings, os.path.join(ARTIFACTS_DIR, "index_mappings.pkl"))
+shutil.copy(tmp_train, os.path.join(ARTIFACTS_DIR, "train_matrix.npz"))
+shutil.copy(tmp_test, os.path.join(ARTIFACTS_DIR, "test_matrix.npz"))
+
+print(f"Đã lưu ma trận và mapping thành công vào: {ARTIFACTS_DIR}")
+
