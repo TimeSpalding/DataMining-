@@ -1,8 +1,13 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC # Tạo Ma trận tương tác (Interaction Matrix) cho Hệ thống Gợi ý
-# MAGIC **Mục tiêu:** Sử dụng bảng `silver_unified_logs` (nhật ký đã làm sạch) để tạo tập train và test theo thời gian (Temporal split).
-# MAGIC **Output:** Các dictionary mapping và file ma trận sparse.
+# MAGIC # Tạo Ma trận tương tác (Interaction Matrix) cho Hệ thống Gợi ý (Phiên bản Cải tiến - LightGCN Hybrid)
+# MAGIC **Mục tiêu:** 
+# MAGIC - Sử dụng bảng `silver_unified_logs` để tạo tập train và test theo thời gian (Temporal split).
+# MAGIC - Tích hợp logic từ bài toán gốc:
+# MAGIC   - **Trọng số theo thời gian (Recency weight):** Ưu tiên các tương tác gần đây.
+# MAGIC   - **Lọc tối thiểu (Min interactions):** Loại bỏ user/item ít tương tác.
+# MAGIC   - **Temporal Train/Test Split:** Dành 20% item nghe gần nhất của user cho tập test.
+# MAGIC **Output:** Các dictionary mapping, file ma trận sparse.
 
 # COMMAND ----------
 
@@ -11,93 +16,119 @@ import scipy.sparse as sp
 import joblib
 import pandas as pd
 from pyspark.sql import functions as F
-import os
+from pyspark.sql.window import Window
 from pyspark.sql import SparkSession
+import os
 
 spark = SparkSession.builder.getOrCreate()
 
-
-# 1. Tạo một Volume mới (sân bãi hợp lệ) bằng Spark SQL nếu nó chưa tồn tại
+# 1. Tạo một Volume mới bằng Spark SQL nếu nó chưa tồn tại (Unity Catalog)
 spark.sql("CREATE VOLUME IF NOT EXISTS workspace.default.recommender_artifacts")
 
-# 2. Khai báo đường dẫn mới trỏ thẳng vào Volume vừa tạo
+# 2. Khai báo đường dẫn trỏ thẳng vào Volume vừa tạo
 ARTIFACTS_DIR = "/Volumes/workspace/default/recommender_artifacts"
 
-# 3. Serverless hoàn toàn cho phép os.makedirs hoạt động bên trong /Volumes/
-import os
+# 3. Tạo thư mục nếu chưa có
 os.makedirs(ARTIFACTS_DIR, exist_ok=True)
+
+# Cấu hình theo mô hình LightGCN Hybrid
+CONFIG = {
+    'min_interactions': 20,
+    'recency_halflife': 60, # days
+    'test_ratio': 0.2,
+    'min_items_for_split': 5
+}
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## 1. Kéo dữ liệu từ Databricks
+# MAGIC ## 1. Đọc dữ liệu và tính toán trọng số (Recency Weighting)
 
 # COMMAND ----------
 
 # Lấy log tương tác từ silver table
 silver_logs_df = spark.table("default.silver_unified_logs")
 
-# Lọc các tương tác rác nếu cần, và chuyển về Pandas để thao tác ma trận
-# Nếu dữ liệu siêu lớn, có thể dùng groupby count trên PySpark rồi mới collect
-# Đảm bảo bạn đã import thư viện functions ở đầu file
-# from pyspark.sql import functions as F
+# Chuyển timestamp sang unix (giây) để dễ tính toán khoảng thời gian
+df = silver_logs_df.withColumn("ts_unix", F.unix_timestamp("timestamp"))
+df = df.filter(F.col("ts_unix").isNotNull())
 
-# 1. Ép Spark đếm số lượt nghe (play_count) của từng user với từng bài hát ngay trên mây
-grouped_spark_df = silver_logs_df.groupBy("user_id", "recording_msid").agg(
-    F.count("*").alias("play_count")
+# Lấy mốc thời gian lớn nhất (global_max_ts) trong toàn bộ dữ liệu
+global_max_ts = df.agg(F.max("ts_unix")).collect()[0][0]
+print(f"Global max timestamp: {pd.Timestamp(global_max_ts, unit='s')}")
+
+# Aggregation: đếm số lần play và lấy last_ts cho từng cặp (user, item)
+agg_df = df.groupBy("user_id", "recording_msid").agg(
+    F.count("*").alias("play_count"),
+    F.max("ts_unix").alias("last_ts")
 )
 
-# 2. Dữ liệu lúc này đã loại bỏ hoàn toàn các dòng trùng lặp, dung lượng giảm từ 8.1GB xuống chỉ còn vài chục MB.
-# Bây giờ gọi toPandas() mới thực sự an toàn tuyệt đối!
-pdf = grouped_spark_df.toPandas()
-
-spark_meta_df = silver_logs_df.select("recording_msid", "track_name", "artist_name").dropDuplicates(["recording_msid"])
-meta_df = spark_meta_df.toPandas()
-
-item_meta = meta_df.set_index("recording_msid").to_dict('index')
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## 2. Temporal Split (Tách Train/Test theo thời gian)
-
-# COMMAND ----------
-
-# Sắp xếp log theo thời gian
-pdf['timestamp'] = pd.to_datetime(pdf['timestamp'])
-pdf = pdf.sort_values(by=['user_id', 'timestamp'])
-
-# Giữ lại 20% tương tác MỚI NHẤT của từng user làm tập Test
-def split_user(group):
-    n = len(group)
-    n_test = int(n * 0.2)
-    if n_test == 0:
-        return group, pd.DataFrame(columns=group.columns)
-    return group.iloc[:-n_test], group.iloc[-n_test:]
-
-train_list, test_list = [], []
-for uid, group in pdf.groupby('user_id'):
-    train_part, test_part = split_user(group)
-    train_list.append(train_part)
-    test_list.append(test_part)
-
-train_pdf = pd.concat(train_list)
-test_pdf = pd.concat(test_list)
-
-print(f"Total interactions: {len(pdf)}")
-print(f"Train set: {len(train_pdf)}")
-print(f"Test set: {len(test_pdf)}")
+# Tính toán trọng số tương tác (Weighted Interaction)
+# weight = play_count * exp(-days_ago / halflife)
+agg_df = agg_df.withColumn(
+    "days_ago", (F.lit(global_max_ts) - F.col("last_ts")) / 86400.0
+).withColumn(
+    "recency", F.exp(-F.col("days_ago") / CONFIG['recency_halflife'])
+).withColumn(
+    "weight", F.col("play_count") * F.col("recency")
+)
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## 3. Ánh xạ ID và Xây dựng Ma trận Sparse
+# MAGIC ## 2. Lọc Min Interactions
 
 # COMMAND ----------
 
-# Lấy danh sách user và item duy nhất từ tập Train
-unique_users = train_pdf['user_id'].unique()
-unique_items = train_pdf['recording_msid'].unique()
+# Tính số lượng item mỗi user đã nghe, và số lượng user đã nghe mỗi item
+user_counts = agg_df.groupBy("user_id").count().withColumnRenamed("count", "user_ic_cnt")
+item_counts = agg_df.groupBy("recording_msid").count().withColumnRenamed("count", "item_uc_cnt")
+
+# Lọc bỏ các user và item có tổng số lần xuất hiện < min_interactions
+filtered_df = agg_df.join(user_counts, on="user_id") \
+                    .join(item_counts, on="recording_msid") \
+                    .filter((F.col("user_ic_cnt") >= CONFIG['min_interactions']) & 
+                            (F.col("item_uc_cnt") >= CONFIG['min_interactions']))
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## 3. Temporal Train/Test Split
+
+# COMMAND ----------
+
+# Xếp hạng item theo last_ts cho mỗi user (từ cũ nhất đến mới nhất)
+window_spec = Window.partitionBy("user_id").orderBy(F.col("last_ts").asc())
+split_df = filtered_df.withColumn("rank", F.row_number().over(window_spec)) \
+                      .withColumn("total_items", F.count("*").over(Window.partitionBy("user_id")))
+
+# Xác định item nào thuộc tập test (20% item nghe gần nhất)
+split_df = split_df.withColumn(
+    "n_test",
+    F.when(
+        F.col("total_items") >= CONFIG['min_items_for_split'], 
+        F.greatest(F.lit(1), (F.col("total_items") * CONFIG['test_ratio']).cast("int"))
+    ).otherwise(0)
+)
+
+split_df = split_df.withColumn(
+    "is_test",
+    F.col("rank") > (F.col("total_items") - F.col("n_test"))
+)
+
+# Kéo dữ liệu về Pandas để xây dựng ma trận Sparse
+pdf = split_df.select("user_id", "recording_msid", "weight", "is_test").toPandas()
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## 4. Ánh xạ ID và Xây dựng Ma trận Sparse
+
+# COMMAND ----------
+
+# Xây dựng danh sách index mapping
+unique_users = pdf['user_id'].unique()
+unique_items = pdf['recording_msid'].unique()
 
 user2idx = {u: i for i, u in enumerate(unique_users)}
 item2idx = {i: j for j, i in enumerate(unique_items)}
@@ -106,32 +137,34 @@ idx2item = {j: i for i, j in item2idx.items()}
 
 num_users = len(user2idx)
 num_items = len(item2idx)
+print(f"Users: {num_users:,}, Items: {num_items:,}")
 
-print(f"Users: {num_users}, Items: {num_items}")
+def build_sparse_matrix(df, shape):
+    rows = df['user_id'].map(user2idx).values
+    cols = df['recording_msid'].map(item2idx).values
+    data = df['weight'].values
+    return sp.csr_matrix((data, (rows, cols)), shape=shape, dtype=np.float32)
 
-# Hàm tạo ma trận sparse (dựa trên số lần nghe / hoặc simply binary 1/0)
-def build_sparse_matrix(df, u2i, i2i, shape):
-    # Lọc bỏ user/item không có trong tập train
-    df = df[df['user_id'].isin(u2i.keys()) & df['recording_msid'].isin(i2i.keys())]
-    
-    # Tính số lần play
-    counts = df.groupby(['user_id', 'recording_msid']).size().reset_index(name='plays')
-    
-    rows = counts['user_id'].map(u2i).values
-    cols = counts['recording_msid'].map(i2i).values
-    data = np.ones(len(rows)) # Đơn giản hóa: chuyển thành Implicit Feedback (1/0)
-    
-    return sp.csr_matrix((data, (rows, cols)), shape=shape)
+train_pdf = pdf[~pdf['is_test']]
+test_pdf  = pdf[pdf['is_test']]
 
-train_matrix = build_sparse_matrix(train_pdf, user2idx, item2idx, (num_users, num_items))
-test_matrix  = build_sparse_matrix(test_pdf,  user2idx, item2idx, (num_users, num_items))
+train_matrix = build_sparse_matrix(train_pdf, (num_users, num_items))
+test_matrix  = build_sparse_matrix(test_pdf, (num_users, num_items))
+
+print(f"Train set: {train_matrix.nnz:,} interactions")
+print(f"Test set: {test_matrix.nnz:,} interactions")
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## 4. Lưu Artifacts
+# MAGIC ## 5. Lưu Artifacts
 
 # COMMAND ----------
+
+# Lấy metadata cho các item còn lại
+meta_df = silver_logs_df.select("recording_msid", "track_name", "artist_name").dropDuplicates(["recording_msid"]).toPandas()
+meta_df = meta_df[meta_df['recording_msid'].isin(item2idx.keys())]
+item_meta = meta_df.set_index("recording_msid").to_dict('index')
 
 # Lưu cấu trúc mapping
 mappings = {
