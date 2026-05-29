@@ -8,6 +8,10 @@
 
 # COMMAND ----------
 
+# MAGIC %pip install torch faiss-cpu scikit-learn joblib
+
+# COMMAND ----------
+
 import os
 import time
 import glob
