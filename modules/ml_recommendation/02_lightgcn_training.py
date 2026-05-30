@@ -60,24 +60,43 @@ item_meta = mappings['item_meta']
 item2idx = mappings['item2idx']
 
 # Dataloader lấy mẫu Positive (tương tác) và Negative (không tương tác)
-class BPRDataset(Dataset):
-    def __init__(self, matrix):
-        self.users, self.pos_items = matrix.nonzero()
+class WeightedBPRDataset(Dataset):
+    def __init__(self, matrix, neg_pool_size=2000000):
+        coo = matrix.tocoo()
+        self.users = coo.row.astype(np.int32)
+        self.pos_items = coo.col.astype(np.int32)
+        self.weights = coo.data.astype(np.float32)
         self.num_items = matrix.shape[1]
+        
+        # Tạo phân phối Negative Sampling dựa trên độ phổ biến (Popularity)
+        item_counts = np.asarray(matrix.sum(axis=0)).flatten()
+        neg_probs = np.power(item_counts + 1e-8, 0.75)
+        neg_probs /= neg_probs.sum()
+        
+        print(f"Precomputing negative pool ({neg_pool_size} samples)...")
+        self._pool = np.random.choice(self.num_items, size=neg_pool_size, p=neg_probs).astype(np.int32)
+        self._pool_size = neg_pool_size
         
     def __len__(self):
         return len(self.users)
         
     def __getitem__(self, idx):
-        u = self.users[idx]
-        i = self.pos_items[idx]
-        # Lấy mẫu ngẫu nhiên negative
-        j = np.random.randint(self.num_items)
+        u = int(self.users[idx])
+        i = int(self.pos_items[idx])
+        j = int(self._pool[np.random.randint(self._pool_size)])
         return u, i, j
 
-dataset = BPRDataset(train_matrix)
+dataset = WeightedBPRDataset(train_matrix)
+
+# Weighted Positive Sampling giống bản gốc
+sampler = torch.utils.data.WeightedRandomSampler(
+    weights=torch.from_numpy(dataset.weights),
+    num_samples=len(dataset),
+    replacement=True
+)
+
 # Đưa num_workers=0 để chạy an toàn trên Serverless Container (Tránh lỗi vỡ Shared Memory /dev/shm)
-dataloader = DataLoader(dataset, batch_size=2048, shuffle=True, num_workers=0)
+dataloader = DataLoader(dataset, batch_size=200000, sampler=sampler, num_workers=0)
 
 # COMMAND ----------
 
@@ -115,12 +134,24 @@ if torch.cuda.is_available():
     norm_adj_tensor = norm_adj_tensor.cuda()
 
 class LightGCN(nn.Module):
-    def __init__(self, n_users, n_items, emb_dim=128, layers=3):
+    def __init__(self, n_users, n_items, emb_dim=128, layers=3, pretrained_user_emb=None, pretrained_item_emb=None):
         super().__init__()
         self.user_emb = nn.Embedding(n_users, emb_dim)
         self.item_emb = nn.Embedding(n_items, emb_dim)
+        
+        # Khởi tạo mặc định
         nn.init.normal_(self.user_emb.weight, std=0.1)
         nn.init.normal_(self.item_emb.weight, std=0.1)
+        
+        # Nếu có Pre-trained Weights (Fine-tuning)
+        if pretrained_user_emb is not None:
+            old_u = min(n_users, pretrained_user_emb.shape[0])
+            self.user_emb.weight.data[:old_u].copy_(torch.from_numpy(pretrained_user_emb[:old_u]))
+            
+        if pretrained_item_emb is not None:
+            old_i = min(n_items, pretrained_item_emb.shape[0])
+            self.item_emb.weight.data[:old_i].copy_(torch.from_numpy(pretrained_item_emb[:old_i]))
+            
         self.layers = layers
         
     def forward(self, adj):
@@ -147,17 +178,37 @@ class LightGCN(nn.Module):
 EMB_DIM = 128
 LAYERS = 3
 EPOCHS = 10
-LR = 0.001
+LR = 0.01
 DECAY = 1e-4 # L2 Regularization chống overfitting
 
-model = LightGCN(num_users, num_items, emb_dim=EMB_DIM, layers=LAYERS).to(device)
+# ==========================================
+# CƠ CHẾ WARM-START FINE-TUNING
+# ==========================================
+user_vec_path = os.path.join(ARTIFACTS_DIR, "user_vectors.npy")
+item_vec_path = os.path.join(ARTIFACTS_DIR, "item_vectors.npy")
+pretrained_user, pretrained_item = None, None
+
+if os.path.exists(user_vec_path) and os.path.exists(item_vec_path):
+    print("Phát hiện Pre-trained Vectors! Kích hoạt chế độ Fine-Tuning (Warm-Start)...")
+    pretrained_user = np.load(user_vec_path)
+    pretrained_item = np.load(item_vec_path)
+    # Giảm số Epochs vì mô hình đã hội tụ trên Colab
+    EPOCHS = 2 
+    LR = 0.0005 # Giảm learning rate để fine-tune nhẹ
+else:
+    print("Train mô hình từ đầu (Cold-Start)...")
+
+model = LightGCN(num_users, num_items, emb_dim=EMB_DIM, layers=LAYERS, 
+                 pretrained_user_emb=pretrained_user, 
+                 pretrained_item_emb=pretrained_item).to(device)
+
 optimizer = optim.Adam(model.parameters(), lr=LR, weight_decay=DECAY)
 scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=EPOCHS)
 
 # Thiết lập đích danh MLflow Experiment để tránh lỗi trên Python Script Task
 mlflow.set_experiment("/Users/truongtrinhdac03@gmail.com/LightGCN_Recommendation")
 
-print(f"Bắt đầu huấn luyện LightGCN trên {device}...")
+print(f"Bắt đầu huấn luyện LightGCN trên {device} với {EPOCHS} Epochs...")
 with mlflow.start_run(run_name="LightGCN_Training"):
     mlflow.log_params({"emb_dim": EMB_DIM, "layers": LAYERS, "epochs": EPOCHS, "lr": LR, "weight_decay": DECAY})
     
