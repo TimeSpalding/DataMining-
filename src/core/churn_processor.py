@@ -18,9 +18,9 @@ def load_churn_data(file_path=None):
     
     # Tạo thêm nhãn Phân loại rủi ro cho biểu đồ tổng quan
     def categorize_risk(score):
-        if score > 70: return "🚨 Rủi ro cao (>70%)"
-        elif score > 40: return "⚠️ Cảnh báo (40-70%)"
-        else: return "✅ An toàn (<40%)"
+        if score > 70: return "Rủi ro cao (>70%)"
+        elif score > 40: return "Cảnh báo (40-70%)"
+        else: return "An toàn (<40%)"
     
     df['Risk_Level'] = df['churn_risk_percent'].apply(categorize_risk)
     return df

@@ -1,8 +1,8 @@
-# AI Music Recommender System 🎵
+# AI Music Recommender System
 
 Hệ thống gợi ý âm nhạc thông minh sử dụng thuật toán **LightGCN** kết hợp với **TF-IDF** cho các chiến lược gợi ý đa dạng (Hybrid, Trending, Discovery, Real-time).
 
-## 🚀 Tính năng chính
+## Tính năng chính
 - **Dành riêng cho bạn**: Gợi ý cá nhân hóa dựa trên hành vi nghe nhạc lịch sử.
 - **Khám phá & Xu hướng**: Cập nhật các bài hát đang thịnh hành và đề xuất mới mẻ thoát khỏi vùng an toàn.
 - **Playlist Generator**: Tự động tạo danh sách phát dựa trên bài hát hoặc nghệ sĩ yêu thích.
@@ -11,7 +11,7 @@ Hệ thống gợi ý âm nhạc thông minh sử dụng thuật toán **LightGC
 
 ---
 
-## 📁 Cấu trúc thư mục
+## Cấu trúc thư mục
 Dự án được tổ chức theo chuẩn module để dễ dàng quản lý và mở rộng:
 
 ```text
@@ -41,7 +41,7 @@ Recommend-System-feature-optimize-rs/
 
 ---
 
-## 🛠️ Hướng dẫn cài đặt & Sử dụng
+## Hướng dẫn cài đặt & Sử dụng
 
 ### 1. Yêu cầu hệ thống
 - Python 3.9+
@@ -68,7 +68,7 @@ streamlit run app.py
 
 ---
 
-## 🐳 Triển khai với Docker
+## Triển khai với Docker
 
 Nếu bạn muốn chạy ứng dụng trong container để đảm bảo tính nhất quán:
 
@@ -85,7 +85,7 @@ Sau đó truy cập: `http://localhost:8501`
 
 ---
 
-## 🖼️ Giao diện Demo
+## Giao diện Demo
 
 Dưới đây là một số hình ảnh thực tế từ hệ thống:
 
