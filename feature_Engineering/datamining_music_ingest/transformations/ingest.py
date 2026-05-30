@@ -24,6 +24,5 @@ def live_music_raw():
         spark.readStream.format("cloudFiles")
         .option("cloudFiles.format", "json")
         .schema(music_schema)
-        # Sửa tên container thành bronzelive
         .load("abfss://bronzelive@musicprojectdm.dfs.core.windows.net/")
     )

@@ -1,17 +1,6 @@
-# Databricks notebook source
-# MAGIC %md
-# MAGIC # Huấn luyện mô hình LightGCN và Hybrid TF-IDF (Cold-Start)
-# MAGIC **Mục tiêu:** 
-# MAGIC - Huấn luyện mô hình học sâu LightGCN trên ma trận tương tác.
-# MAGIC - Xây dựng mô hình TF-IDF + SVD từ metadata (artist_name, track_name) để giải quyết bài toán Cold-Start.
-# MAGIC - Lưu toàn bộ Embeddings và Model Artifacts xuống Unity Catalog Volume.
-
-# COMMAND ----------
-
 import subprocess
 import sys
 
-# Khắc phục lỗi thiếu thư viện cho Databricks Python Script Task
 def install_packages():
     packages = ["torch", "faiss-cpu", "scikit-learn", "joblib"]
     print("Đang tự động cài đặt các thư viện:", packages)
@@ -19,7 +8,6 @@ def install_packages():
 
 install_packages()
 
-# COMMAND ----------
 
 import os
 import time
@@ -37,19 +25,14 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.decomposition import TruncatedSVD
 import shutil
 
-# --- Cấu hình đường dẫn Unity Catalog ---
 ARTIFACTS_DIR = "/Volumes/workspace/default/recommender_artifacts"
 
-# Sử dụng thư mục tạm của driver để tránh lỗi I/O (Errno 5)
 TMP_DIR = "/tmp/recommender_training"
 os.makedirs(TMP_DIR, exist_ok=True)
 
-# COMMAND ----------
 
-# MAGIC %md
-# MAGIC ## 1. Load Data và Định nghĩa DataLoader
+# 1. Load Data và Định nghĩa DataLoader
 
-# COMMAND ----------
 
 print(f"Loading data từ {ARTIFACTS_DIR}...")
 train_matrix = sp.load_npz(os.path.join(ARTIFACTS_DIR, "train_matrix.npz"))
@@ -98,12 +81,9 @@ sampler = torch.utils.data.WeightedRandomSampler(
 # Đưa num_workers=0 để chạy an toàn trên Serverless Container (Tránh lỗi vỡ Shared Memory /dev/shm)
 dataloader = DataLoader(dataset, batch_size=200000, sampler=sampler, num_workers=0)
 
-# COMMAND ----------
 
-# MAGIC %md
-# MAGIC ## 2. Kiến trúc LightGCN
+# 2. Kiến trúc LightGCN
 
-# COMMAND ----------
 
 # Hàm tạo adjacency matrix chuẩn hóa cho LightGCN
 def build_adj_matrix(matrix):
@@ -168,22 +148,15 @@ class LightGCN(nn.Module):
         u_emb, i_emb = torch.split(all_embeddings, [self.user_emb.num_embeddings, self.item_emb.num_embeddings])
         return u_emb, i_emb
 
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## 3. Huấn luyện LightGCN (MLflow)
-
-# COMMAND ----------
+# 3. Huấn luyện LightGCN (MLflow)
 
 EMB_DIM = 128
 LAYERS = 3
 EPOCHS = 10
 LR = 0.01
-DECAY = 1e-4 # L2 Regularization chống overfitting
+DECAY = 1e-4 
 
-# ==========================================
-# CƠ CHẾ WARM-START FINE-TUNING
-# ==========================================
+
 user_vec_path = os.path.join(ARTIFACTS_DIR, "user_vectors.npy")
 item_vec_path = os.path.join(ARTIFACTS_DIR, "item_vectors.npy")
 pretrained_user, pretrained_item = None, None
@@ -192,9 +165,8 @@ if os.path.exists(user_vec_path) and os.path.exists(item_vec_path):
     print("Phát hiện Pre-trained Vectors! Kích hoạt chế độ Fine-Tuning (Warm-Start)...")
     pretrained_user = np.load(user_vec_path)
     pretrained_item = np.load(item_vec_path)
-    # Giảm số Epochs vì mô hình đã hội tụ trên Colab
     EPOCHS = 2 
-    LR = 0.0005 # Giảm learning rate để fine-tune nhẹ
+    LR = 0.0005 
 else:
     print("Train mô hình từ đầu (Cold-Start)...")
 
@@ -249,12 +221,8 @@ with mlflow.start_run(run_name="LightGCN_Training"):
         mlflow.log_metric("total_loss", avg_loss, step=epoch)
         print(f"Epoch {epoch+1:02d}/{EPOCHS} | Loss: {avg_loss:.4f} | LR: {scheduler.get_last_lr()[0]:.6f}")
 
-# COMMAND ----------
+# 4. Trích xuất Vectors & TF-IDF/SVD cho Cold-Start
 
-# MAGIC %md
-# MAGIC ## 4. Trích xuất Vectors & TF-IDF/SVD cho Cold-Start
-
-# COMMAND ----------
 
 # 1. Trích xuất LightGCN Embeddings
 model.eval()
@@ -272,7 +240,6 @@ all_texts = []
 for msid, meta in item_meta.items():
     artist = meta.get('artist_name', '').strip().lower()
     track = meta.get('track_name', '').strip().lower()
-    # Nhân đôi artist để tăng trọng lượng ca sĩ (giống nguyên bản trong file ipynb)
     text = f"{artist} {artist} {track}".strip()
     all_texts.append(text if text else "unknown")
 
@@ -294,12 +261,8 @@ dense_content_matrix = svd.fit_transform(tfidf_matrix).astype(np.float32)
 faiss.normalize_L2(dense_content_matrix)
 print("Hoàn tất huấn luyện TF-IDF và SVD!")
 
-# COMMAND ----------
+# 5. Lưu toàn bộ Artifacts 
 
-# MAGIC %md
-# MAGIC ## 5. Lưu toàn bộ Artifacts (Sử dụng /tmp chống lỗi I/O)
-
-# COMMAND ----------
 
 print(f"\nLưu file tạm vào {TMP_DIR}...")
 np.save(os.path.join(TMP_DIR, "user_vectors.npy"), user_vectors)
@@ -309,7 +272,6 @@ np.save(os.path.join(TMP_DIR, "item_vectors.npy"), item_vectors)
 joblib.dump(tfidf, os.path.join(TMP_DIR, "tfidf_model.pkl"))
 joblib.dump(svd, os.path.join(TMP_DIR, "svd_64_model.pkl"))
 
-# Copy toàn bộ sang Unity Catalog Volume
 print(f"Copy files sang Unity Catalog: {ARTIFACTS_DIR}...")
 files_to_copy = [
     "user_vectors.npy", 

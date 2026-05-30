@@ -1,16 +1,3 @@
-# Databricks notebook source
-# MAGIC %md
-# MAGIC # Tạo Ma trận tương tác (Interaction Matrix) cho Hệ thống Gợi ý (Phiên bản Cải tiến - LightGCN Hybrid)
-# MAGIC **Mục tiêu:** 
-# MAGIC - Sử dụng bảng `silver_unified_logs` để tạo tập train và test theo thời gian (Temporal split).
-# MAGIC - Tích hợp logic từ bài toán gốc:
-# MAGIC   - **Trọng số theo thời gian (Recency weight):** Ưu tiên các tương tác gần đây.
-# MAGIC   - **Lọc tối thiểu (Min interactions):** Loại bỏ user/item ít tương tác.
-# MAGIC   - **Temporal Train/Test Split:** Dành 20% item nghe gần nhất của user cho tập test.
-# MAGIC **Output:** Các dictionary mapping, file ma trận sparse.
-
-# COMMAND ----------
-
 import numpy as np
 import scipy.sparse as sp
 import joblib
@@ -22,29 +9,21 @@ import os
 
 spark = SparkSession.builder.getOrCreate()
 
-# 1. Tạo một Volume mới bằng Spark SQL nếu nó chưa tồn tại (Unity Catalog)
 spark.sql("CREATE VOLUME IF NOT EXISTS workspace.default.recommender_artifacts")
 
-# 2. Khai báo đường dẫn trỏ thẳng vào Volume vừa tạo
 ARTIFACTS_DIR = "/Volumes/workspace/default/recommender_artifacts"
 
-# 3. Tạo thư mục nếu chưa có
 os.makedirs(ARTIFACTS_DIR, exist_ok=True)
 
-# Cấu hình theo mô hình LightGCN Hybrid
 CONFIG = {
     'min_interactions': 20,
-    'recency_halflife': 60, # days
+    'recency_halflife': 60, 
     'test_ratio': 0.2,
     'min_items_for_split': 5
 }
 
-# COMMAND ----------
+# 1. Đọc dữ liệu và tính toán trọng số (Recency Weighting)
 
-# MAGIC %md
-# MAGIC ## 1. Đọc dữ liệu và tính toán trọng số (Recency Weighting)
-
-# COMMAND ----------
 
 # Lấy log tương tác từ silver table
 silver_logs_df = spark.table("default.silver_unified_logs")
@@ -73,12 +52,8 @@ agg_df = agg_df.withColumn(
     "weight", F.col("play_count") * F.col("recency")
 )
 
-# COMMAND ----------
+# 2. Lọc Min Interactions
 
-# MAGIC %md
-# MAGIC ## 2. Lọc Min Interactions
-
-# COMMAND ----------
 
 # Tính số lượng item mỗi user đã nghe, và số lượng user đã nghe mỗi item
 user_counts = agg_df.groupBy("user_id").count().withColumnRenamed("count", "user_ic_cnt")
@@ -90,12 +65,8 @@ filtered_df = agg_df.join(user_counts, on="user_id") \
                     .filter((F.col("user_ic_cnt") >= CONFIG['min_interactions']) & 
                             (F.col("item_uc_cnt") >= CONFIG['min_interactions']))
 
-# COMMAND ----------
+# 3. Temporal Train/Test Split
 
-# MAGIC %md
-# MAGIC ## 3. Temporal Train/Test Split
-
-# COMMAND ----------
 
 # Xếp hạng item theo last_ts cho mỗi user (từ cũ nhất đến mới nhất)
 window_spec = Window.partitionBy("user_id").orderBy(F.col("last_ts").asc())
@@ -119,12 +90,8 @@ split_df = split_df.withColumn(
 # Kéo dữ liệu về Pandas để xây dựng ma trận Sparse
 pdf = split_df.select("user_id", "recording_msid", "weight", "is_test").toPandas()
 
-# COMMAND ----------
+# 4. Ánh xạ ID và Xây dựng Ma trận Sparse
 
-# MAGIC %md
-# MAGIC ## 4. Ánh xạ ID và Xây dựng Ma trận Sparse
-
-# COMMAND ----------
 
 # Xây dựng danh sách index mapping
 unique_users = pdf['user_id'].unique()
@@ -154,12 +121,8 @@ test_matrix  = build_sparse_matrix(test_pdf, (num_users, num_items))
 print(f"Train set: {train_matrix.nnz:,} interactions")
 print(f"Test set: {test_matrix.nnz:,} interactions")
 
-# COMMAND ----------
+# 5. Lưu Artifacts
 
-# MAGIC %md
-# MAGIC ## 5. Lưu Artifacts
-
-# COMMAND ----------
 
 import shutil
 
@@ -177,7 +140,6 @@ mappings = {
     'item_meta': item_meta
 }
 
-# --- Workaround: Lưu tạm ra /tmp để tránh lỗi Input/Output (Errno 5) của FUSE Mount ---
 tmp_dir = "/tmp/recommender_artifacts"
 os.makedirs(tmp_dir, exist_ok=True)
 
