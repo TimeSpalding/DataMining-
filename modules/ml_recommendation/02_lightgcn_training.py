@@ -76,7 +76,8 @@ class BPRDataset(Dataset):
         return u, i, j
 
 dataset = BPRDataset(train_matrix)
-dataloader = DataLoader(dataset, batch_size=2048, shuffle=True, num_workers=2)
+# Đưa num_workers=0 để chạy an toàn trên Serverless Container (Tránh lỗi vỡ Shared Memory /dev/shm)
+dataloader = DataLoader(dataset, batch_size=2048, shuffle=True, num_workers=0)
 
 # COMMAND ----------
 
@@ -153,8 +154,10 @@ model = LightGCN(num_users, num_items, emb_dim=EMB_DIM, layers=LAYERS).to(device
 optimizer = optim.Adam(model.parameters(), lr=LR, weight_decay=DECAY)
 scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=EPOCHS)
 
+# Thiết lập đích danh MLflow Experiment để tránh lỗi trên Python Script Task
+mlflow.set_experiment("/Users/truongtrinhdac03@gmail.com/LightGCN_Recommendation")
+
 print(f"Bắt đầu huấn luyện LightGCN trên {device}...")
-# Có thể đổi mlflow experiment name nếu cần thiết
 with mlflow.start_run(run_name="LightGCN_Training"):
     mlflow.log_params({"emb_dim": EMB_DIM, "layers": LAYERS, "epochs": EPOCHS, "lr": LR, "weight_decay": DECAY})
     
