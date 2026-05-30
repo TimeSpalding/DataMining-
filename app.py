@@ -133,8 +133,14 @@ category = st.sidebar.selectbox("Chọn Nhóm Trải Nghiệm:", menu_options)
 
 # Cấu hình tham số cho Recommender
 n_recs = 10
+content_alpha = 0.25
 if st.session_state.role != "guest":
     n_recs = st.sidebar.slider("Số lượng gợi ý:", min_value=5, max_value=30, value=10, step=5)
+    content_alpha = st.sidebar.slider(
+        "Trọng số nội dung (Alpha):", 
+        min_value=0.0, max_value=1.0, value=0.25, step=0.05,
+        help="Alpha càng cao sẽ càng ưu tiên gợi ý theo thuộc tính thể loại/nghệ sĩ (TF-IDF). Alpha thấp ưu tiên hành vi nghe nhạc tương tự (LightGCN)."
+    )
 
 # ==========================================
 # 5. NỘI DUNG CHÍNH (MAIN AREA)
@@ -149,7 +155,7 @@ if category == "Quản Trị Rời Bỏ (Churn)":
     render_admin_dashboard()
 
 elif category == "Trang Chủ & Cá Nhân":
-    render_home_tab(rec_sys, user_input, n_recs)
+    render_home_tab(rec_sys, user_input, n_recs, content_alpha)
 
 elif category == "Khám Phá & Xu Hướng":
     render_discovery_tab(rec_sys, user_input, n_recs)

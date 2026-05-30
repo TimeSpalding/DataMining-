@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 from src.ui.components import render_song_cards, render_section_header
 
-def render_home_tab(rec_sys, user_input, n_recs):
+def render_home_tab(rec_sys, user_input, n_recs, content_alpha=0.25):
     # Chia tab nhỏ bên trong
     tab1, tab2, tab3, tab4 = st.tabs([
         "Dành Riêng Cho Bạn", 
@@ -25,7 +25,7 @@ def render_home_tab(rec_sys, user_input, n_recs):
             refresh1 = st.button("Làm mới", key="refresh_home_tab1", use_container_width=True)
 
         with st.spinner("Đang trích xuất đặc trưng..."):
-            df_pool = rec_sys.recommend_hybrid(user_input, n=n_recs * 10)
+            df_pool = rec_sys.recommend_hybrid(user_input, n=n_recs * 10, content_alpha=content_alpha)
             if not df_pool.empty:
                 df = rec_sys._apply_refresh_logic(
                     df_pool, n=n_recs,
