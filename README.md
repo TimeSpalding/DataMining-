@@ -1,8 +1,8 @@
-# Music User Recommendation & Analytics 🎵
+# Music User Recommendation & Analytics
 
 Dự án này tập trung vào việc khai phá dữ liệu nghe nhạc (từ ListenBrain) để thấu hiểu hành vi người dùng, dự báo rời bỏ và cung cấp các gợi ý cá nhân hóa chính xác nhất.
 
-## 🚀 Cấu trúc hệ thống
+## Cấu trúc hệ thống
 
 Hệ thống được chia thành các thành phần chính:
 
@@ -23,7 +23,7 @@ Giao diện trực quan tích hợp toàn bộ kết quả phân tích và công
 
 ---
 
-## 📁 Cấu trúc thư mục
+## Cấu trúc thư mục
 
 ```text
 .
@@ -45,7 +45,7 @@ Giao diện trực quan tích hợp toàn bộ kết quả phân tích và công
 
 ---
 
-## 🛠️ Hướng dẫn cài đặt & Sử dụng
+## Hướng dẫn cài đặt & Sử dụng
 
 ### 1. Yêu cầu hệ thống
 * Python 3.9+
@@ -71,7 +71,7 @@ streamlit run app.py
 
 ---
 
-## 🐳 Triển khai với Docker
+## Triển khai với Docker
 
 Nếu bạn muốn chạy ứng dụng trong container để đảm bảo tính nhất quán:
 
@@ -88,7 +88,7 @@ Sau đó truy cập: `http://localhost:8501`
 
 ---
 
-## 🖼️ Giao diện Demo
+## Giao diện Demo
 
 Dưới đây là một số hình ảnh thực tế từ hệ thống:
 

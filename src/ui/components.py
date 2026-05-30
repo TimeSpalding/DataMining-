@@ -468,4 +468,4 @@ def render_bottom_player():
                 if current_song.get('audio_path'):
                     st.audio(current_song['audio_path'], autoplay=True)
                 else:
-                    st.info("⚠️ Đang chọn file nhạc...")
+                    st.info("Đang chọn file nhạc...")

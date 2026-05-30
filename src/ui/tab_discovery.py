@@ -6,9 +6,9 @@ from src.ui.components import render_song_cards, render_section_header
 def render_home_tab(rec_sys, user_input, n_recs):
     # Khởi tạo 3 tab con bên trong nhóm Trang Chủ
     tab1, tab2, tab3 = st.tabs([
-        "🎯 Dành Riêng Cho Bạn", 
-        "⏳ Hành Trình Thời Gian", 
-        "🤝 Người Dùng Tương Tự"
+        "Dành Riêng Cho Bạn", 
+        "Hành Trình Thời Gian", 
+        "Người Dùng Tương Tự"
     ])
     
     # --- TAB 1: GỢI Ý LAI (HYBRID) ---
