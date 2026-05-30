@@ -88,24 +88,22 @@ dataloader = DataLoader(dataset, batch_size=2048, shuffle=True, num_workers=2)
 # Hàm tạo adjacency matrix chuẩn hóa cho LightGCN
 def build_adj_matrix(matrix):
     n_users, n_items = matrix.shape
-    adj = sp.dok_matrix((n_users + n_items, n_users + n_items), dtype=np.float32)
-    adj = adj.tolil()
-    R = matrix.tolil()
     
-    adj[:n_users, n_users:] = R
-    adj[n_users:, :n_users] = R.T
-    adj = adj.todok()
+    # Thay vì dùng DOK và LIL tốn RAM, dùng Block Matrix trực tiếp tạo CSR
+    adj = sp.bmat([[None, matrix], [matrix.T, None]], format='csr', dtype=np.float32)
     
-    rowsum = np.array(adj.sum(axis=1))
-    d_inv = np.power(rowsum, -0.5).flatten()
+    # Tính Degree Matrix (D^-0.5)
+    rowsum = np.array(adj.sum(axis=1)).flatten()
+    d_inv = np.power(rowsum, -0.5)
     d_inv[np.isinf(d_inv)] = 0.
     d_mat = sp.diags(d_inv)
     
+    # Chuẩn hóa: D^-0.5 * A * D^-0.5
     norm_adj = d_mat.dot(adj).dot(d_mat)
-    norm_adj = norm_adj.tocsr()
     
+    # Chuyển đổi sang PyTorch Sparse Tensor
     coo = norm_adj.tocoo()
-    i = torch.LongTensor([coo.row, coo.col])
+    i = torch.LongTensor(np.vstack((coo.row, coo.col)))
     v = torch.FloatTensor(coo.data)
     return torch.sparse_coo_tensor(i, v, coo.shape)
 
