@@ -101,3 +101,4 @@ Dưới đây là một số hình ảnh thực tế từ hệ thống:
 ---
 
 Link phân công công việc: https://docs.google.com/spreadsheets/d/11epef7jHn0fEMzOTHz0TlGQOkU2Z5Lff1clV7m3yo8g/edit?gid=0#gid=0
+Báo cáo: https://github.com/TimeSpalding/DataMining-/blob/nhanh-cua-khoa/B%C3%A1o%20c%C3%A1o.pdf
